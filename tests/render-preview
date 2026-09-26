@@ -8,7 +8,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 ln -s "$shell_dir/Commons" "$work/Commons"
 ln -s "$shell_dir/Ui" "$work/Ui"
-cp ProjectsView.qml ProjectRow.qml Notice.qml Model.js "$work/"
+cp ProjectsView.qml ProjectRow.qml Swatch.qml AddProject.qml TurnOn.qml Model.js "$work/"
 cp tests/render/preview.qml "$work/shell.qml"
 out=$(realpath -m "${1:-preview.png}")
 QT_QPA_PLATFORM=offscreen CT_PREVIEW_FILE="$out" timeout 30s quickshell --no-color -p "$work/shell.qml" > "$work/log" 2>&1 || true

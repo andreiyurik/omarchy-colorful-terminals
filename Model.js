@@ -187,33 +187,33 @@ function folderQuery(text) {
   return isPathQuery(latin) ? latin : t
 }
 
-// Rows for the "Add project" list. Each row: {path, label, detail, taken}.
+// Rows for the "Add project" list. Each row: {path, name, parent, note, taken}.
 //   empty query  current folder, then git repositories
 //   ~/ or /…     the typed folder, then its subfolders (from the helper)
 //   other text   repositories whose path contains the text (either layout)
 function suggestions(query, currentDir, repos, dirs, projects) {
   var rows = []
   var seen = {}
-  function add(path, label, detail) {
+  function add(path, note, typed) {
     if (!path || seen[path]) return
     seen[path] = true
-    rows.push({ path: path, label: label, detail: detail, taken: projectNumber(projects, path) })
+    rows.push({ path: path, name: typed ? path : nameOf(path), parent: typed ? "" : parentOf(path),
+                note: note || "", taken: projectNumber(projects, path) })
   }
   var q = folderQuery(query)
   var i
   if (!q) {
-    if (currentDir) add(currentDir, "Add current folder", currentDir)
-    for (i = 0; i < (repos || []).length; i++) add(repos[i], repos[i], "git repository")
+    if (currentDir) add(currentDir, "current folder")
+    for (i = 0; i < (repos || []).length; i++) add(repos[i])
   } else if (isPathQuery(q)) {
-    var typed = q.length > 1 ? q.replace(/\/+$/, "") : q
-    add(typed, typed, "this folder")
-    for (i = 0; i < (dirs || []).length; i++) add(dirs[i], dirs[i], "")
+    add(q.length > 1 ? q.replace(/\/+$/, "") : q, "this folder", true)
+    for (i = 0; i < (dirs || []).length; i++) add(dirs[i])
   } else {
     var needle = q.toLowerCase()
     var latin = latinKeys(q).toLowerCase()
     for (i = 0; i < (repos || []).length; i++) {
       var r = repos[i].toLowerCase()
-      if (r.indexOf(needle) >= 0 || r.indexOf(latin) >= 0) add(repos[i], repos[i], "git repository")
+      if (r.indexOf(needle) >= 0 || r.indexOf(latin) >= 0) add(repos[i], repos[i] === currentDir ? "current folder" : "")
     }
   }
   return rows
