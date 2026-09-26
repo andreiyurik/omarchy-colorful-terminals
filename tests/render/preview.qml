@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Ui
 
 // Builds preview.png (1600x900): three project terminals and the real
 // settings panel. Run by tests/render-preview.
@@ -9,9 +10,8 @@ ShellRoot {
   readonly property string outFile: Quickshell.env("CT_PREVIEW_FILE")
   readonly property var palette: [
     { name: "Blue", color: "#1a3a5a" }, { name: "Green", color: "#213f12" }, { name: "Red", color: "#681e1e" },
-    { name: "Violet", color: "#4c2276" }, { name: "Olive", color: "#3b3a11" }, { name: "Teal", color: "#133e42" },
-    { name: "Plum", color: "#621d4b" }, { name: "Brown", color: "#4c3316" }, { name: "Indigo", color: "#262e82" },
-    { name: "Jade", color: "#13402a" }
+    { name: "Violet", color: "#4c2276" }, { name: "Plum", color: "#621d4b" }, { name: "Brown", color: "#4c3316" },
+    { name: "Indigo", color: "#262e82" }, { name: "Jade", color: "#13402a" }
   ]
   readonly property var terminals: [
     { key: 1, name: "shop", path: "~/code/shop", color: "#1a3a5a", lines: ["git status", "On branch main", "nothing to commit, working tree clean"] },
@@ -117,34 +117,34 @@ ShellRoot {
         }
       }
 
-      // The real settings panel, scaled up.
-      Rectangle {
+      // The real settings panel, in the card PanelSurface draws, scaled up.
+      BorderSurface {
         id: card
         x: 820; y: 170
         width: 470
-        height: view.implicitHeight + 36
+        height: view.implicitHeight + contentTopInset + contentBottomInset
         scale: 1.5
         transformOrigin: Item.TopLeft
-        radius: 8
+        radius: Style.cornerRadius
         color: Color.menu.background
-        border.color: Util.alpha(Color.foreground, 0.35)
-        border.width: 1
+        borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+        padding: Style.spacing.panelPadding
         ProjectsView {
           id: view
-          x: 18; y: 18
-          width: parent.width - 36
+          x: card.contentLeftInset
+          y: card.contentTopInset
+          width: card.width - card.contentLeftInset - card.contentRightInset
           loaded: true
           config: ({
             projects: [
               { n: 1, path: "~/code/shop", color: "#1a3a5a", name: "shop", exists: true },
               { n: 2, path: "~/code/blog", color: "#213f12", name: "blog", exists: true },
-              { n: 3, path: "~/work/api-gateway", color: "#681e1e", name: "api-gateway", exists: true },
-              { n: 4, path: "~/work/api-gateway/admin", color: "#4c2276", name: "admin", exists: true }
+              { n: 3, path: "~/work/api-gateway", color: "#681e1e", name: "api-gateway", exists: true }
             ],
             palette: test.palette, problems: [], integration: { installed: true }, replaceGroupKeys: false
           })
           scan: ({ currentDir: "", repos: [], conflicts: [] })
-          selected: 2
+          Component.onCompleted: Qt.callLater(function() { view.selected = 2 })
         }
       }
     }
