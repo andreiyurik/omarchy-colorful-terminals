@@ -1,0 +1,781 @@
+#!/bin/bash
+# Colorful Terminals helper: edits projects.conf, opens projects, and adds or
+# removes the three marked blocks that wire the plugin into bash, Hyprland,
+# and the Omarchy menu. The settings panel calls it with argv, never a shell
+# string. Run with no arguments for help.
+
+set -euo pipefail
+shopt -s extglob
+
+PLUGIN_ID="andreiyurik.colorful-terminals"
+helper_path=$(readlink -f -- "${BASH_SOURCE[0]}")
+plugin_dir=${helper_path%/bin/*}
+
+# shellcheck source=lib/config.bash
+source "$plugin_dir/lib/config.bash"
+
+config_dir=${_ct_file%/*}
+backup_dir="$config_dir/backup"
+max_keys=9
+
+# Ten hues around the color wheel at the same low brightness: far enough apart
+# to tell at a glance, dark enough for light text on every dark Omarchy theme.
+palette_names=(Blue Green Red Violet Olive Teal Plum Brown Indigo Jade)
+palette_colors=("#1a3a5a" "#213f12" "#681e1e" "#4c2276" "#3b3a11" "#133e42" "#621d4b" "#4c3316" "#262e82" "#13402a")
+
+usage() {
+  cat <<EOF
+Usage: colorful-terminals <command>
+
+Projects (stored in ${_ct_file/#"$HOME"/\~}):
+  list                     Show projects, their keys and colors
+  add <folder> [#rrggbb]   Add a project; without a color it gets a free one
+      [--at <n>]           ...at position n instead of the end
+  remove <n>               Remove project n
+  move <n> up|down         Move project n, which changes its Super+Alt key
+  color <n> <#rrggbb>      Change the color of project n
+  set replace-group-keys yes|no
+                           Let project keys replace other Super+Alt+digit keys
+  open <n>                 Open project n in a terminal, or focus its window
+
+Integration (bash hook, Hyprland keys, Omarchy menu entry):
+  integration status       Show what is installed
+  integration preview      Show exactly what install would add
+  integration install [--yes]
+  integration uninstall [--yes]
+EOF
+}
+
+die() {
+  printf 'colorful-terminals: %s\n' "$*" >&2
+  exit 1
+}
+
+display_path() {
+  local path=$1
+  if [[ $path == "$HOME" ]]; then
+    printf '~'
+  elif [[ $path == "$HOME"/* ]]; then
+    printf '~/%s' "${path#"$HOME"/}"
+  else
+    printf '%s' "$path"
+  fi
+}
+
+lower() { printf '%s' "${1,,}"; }
+
+valid_color() { [[ $1 =~ ^#[0-9A-Fa-f]{6}$ ]]; }
+
+# ---------------------------------------------------------------- config file
+
+lines=()           # every line of projects.conf
+project_lines=()   # index into lines[] of each project, in order
+
+read_config() {
+  lines=() project_lines=()
+  [[ -f $_ct_file ]] || return 0
+  local line i=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    lines+=("$line")
+    _ct_parse_line "$line"
+    [[ $_ct_kind == project ]] && project_lines+=("$i")
+    i=$((i + 1))
+  done < "$_ct_file"
+}
+
+default_header() {
+  lines=(
+    "# Colorful Terminals: one project per line, the folder and then its color."
+    "# The 1st project opens with Super+Alt+1, the 2nd with Super+Alt+2, up to 9."
+    "# Colors are #rrggbb. Edit here or in the panel (Super+Alt+0); both stay in sync."
+    ""
+  )
+}
+
+format_project() {
+  local path_text=$1 color=$2 comment=${3-} width=24
+  ((${#path_text} + 2 > width)) && width=$((${#path_text} + 2))
+  printf '%-*s%s%s' "$width" "$path_text" "$color" "$comment"
+}
+
+# Writes lines[] back atomically: temp file in the same folder, then rename.
+write_config() {
+  mkdir -p "$config_dir"
+  local tmp
+  tmp=$(mktemp "$config_dir/.projects.conf.XXXXXX")
+  if ((${#lines[@]})); then printf '%s\n' "${lines[@]}" > "$tmp"; fi
+  if [[ -f $_ct_file ]]; then chmod --reference="$_ct_file" "$tmp"; else chmod 644 "$tmp"; fi
+  mv -f "$tmp" "$_ct_file"
+}
+
+lock_config() {
+  mkdir -p "$config_dir"
+  exec 9> "$config_dir/.lock"
+  flock -w 5 9 || die "another change is still being saved"
+}
+
+project_count() { printf '%s' "${#project_lines[@]}"; }
+
+require_index() {
+  local n=$1
+  [[ $n =~ ^[1-9][0-9]*$ ]] || die "project number must be 1 or more, got '$n'"
+  ((n <= ${#project_lines[@]})) || die "there is no project $n (you have $(project_count))"
+}
+
+# Parses lines[] at a project index into _ct_* fields.
+parse_project() { _ct_parse_line "${lines[${project_lines[$(($1 - 1))]}]}"; }
+
+normalize_folder() {
+  local path=$1
+  case $path in
+    "~") path=$HOME ;;
+    "~/"*) path=$HOME/${path:2} ;;
+    /*) ;;
+    *) die "use a full folder path like ~/code/shop or /srv/app, got '$path'" ;;
+  esac
+  while [[ $path == */ && $path != / ]]; do path=${path%/}; done
+  [[ $path != *[$'\n\t\r']* ]] || die "folder names with tabs or line breaks are not supported"
+  [[ ! $path =~ [[:space:]]#([[:space:]]|$) && $path != *[[:space:]] ]] ||
+    die "folder names with ' #' or a trailing space are not supported"
+  [[ -d $path ]] || die "no such folder: $path"
+  printf '%s' "$path"
+}
+
+free_color() {
+  local used=" ${*,,} " i
+  for i in "${!palette_colors[@]}"; do
+    [[ $used == *" ${palette_colors[i]} "* ]] || { printf '%s' "${palette_colors[i]}"; return; }
+  done
+  printf '%s' "${palette_colors[$(($# % ${#palette_colors[@]}))]}"
+}
+
+cmd_list() {
+  _ct_load
+  if ((${#_ct_paths[@]} == 0)); then
+    echo "No projects yet. Add one with: colorful-terminals add <folder>"
+    return
+  fi
+  local i key
+  for i in "${!_ct_paths[@]}"; do
+    key="Super+Alt+$((i + 1))"
+    ((i < max_keys)) || key="(no key)"
+    printf '%-2s %-12s %s  %s\n' "$((i + 1))" "$key" "${_ct_colors[i]}" "$(display_path "${_ct_paths[i]}")"
+  done
+}
+
+cmd_add() {
+  local folder="" color="" at="" arg
+  while (($#)); do
+    arg=$1
+    shift
+    case $arg in
+      --at) at=${1-}; shift || true ;;
+      \#*) color=$arg ;;
+      *) [[ -z $folder ]] || die "only one folder at a time"; folder=$arg ;;
+    esac
+  done
+  [[ -n $folder ]] || die "which folder? Example: colorful-terminals add ~/code/shop"
+  folder=$(normalize_folder "$folder")
+  [[ -z $color ]] || valid_color "$color" || die "colors look like #243453, got '$color'"
+
+  lock_config
+  read_config
+  local i used=()
+  for i in "${!project_lines[@]}"; do
+    parse_project $((i + 1))
+    [[ $_ct_path != "$folder" ]] || die "$(display_path "$folder") is already project $((i + 1))"
+    used+=("$_ct_color")
+  done
+  [[ -n $color ]] || color=$(free_color "${used[@]}")
+  color=$(lower "$color")
+
+  ((${#lines[@]})) || default_header
+  local entry pos count=${#project_lines[@]} n
+  entry=$(format_project "$(display_path "$folder")" "$color")
+  if [[ -n $at ]]; then
+    [[ $at =~ ^[1-9][0-9]*$ ]] || die "--at needs a project number"
+  fi
+  if [[ -n $at ]] && ((at <= count)); then
+    pos=${project_lines[$((at - 1))]}
+    n=$at
+  elif ((count)); then
+    pos=$((${project_lines[$((count - 1))]} + 1))
+    n=$((count + 1))
+  else
+    pos=${#lines[@]}
+    n=1
+  fi
+  lines=("${lines[@]:0:pos}" "$entry" "${lines[@]:pos}")
+  write_config
+  reload_hyprland
+  if ((n <= max_keys)); then
+    echo "Added $(display_path "$folder") as project $n (Super+Alt+$n)"
+  else
+    echo "Added $(display_path "$folder") as project $n (colors only; keys go up to $max_keys)"
+  fi
+}
+
+cmd_remove() {
+  (($# == 1)) || die "usage: colorful-terminals remove <n>"
+  lock_config
+  read_config
+  require_index "$1"
+  local pos=${project_lines[$(($1 - 1))]}
+  parse_project "$1"
+  lines=("${lines[@]:0:pos}" "${lines[@]:pos+1}")
+  write_config
+  reload_hyprland
+  echo "Removed $_ct_path_text"
+}
+
+cmd_move() {
+  (($# == 2)) || die "usage: colorful-terminals move <n> up|down"
+  local n=$1 other
+  lock_config
+  read_config
+  require_index "$n"
+  case $2 in
+    up) other=$((n - 1)) ;;
+    down) other=$((n + 1)) ;;
+    *) die "move <n> up or move <n> down" ;;
+  esac
+  if ((other < 1 || other > ${#project_lines[@]})); then
+    echo "Project $n is already at the $([[ $2 == up ]] && echo top || echo bottom)"
+    return
+  fi
+  local a=${project_lines[$((n - 1))]} b=${project_lines[$((other - 1))]} tmp
+  tmp=${lines[a]}
+  lines[a]=${lines[b]}
+  lines[b]=$tmp
+  write_config
+  reload_hyprland
+  parse_project "$other"
+  echo "$_ct_path_text is now project $other"
+}
+
+cmd_color() {
+  (($# == 2)) || die "usage: colorful-terminals color <n> <#rrggbb>"
+  valid_color "$2" || die "colors look like #243453, got '$2'"
+  lock_config
+  read_config
+  require_index "$1"
+  parse_project "$1"
+  lines[${project_lines[$(($1 - 1))]}]=$(format_project "$_ct_path_text" "$(lower "$2")" "$_ct_comment")
+  write_config
+  echo "$_ct_path_text is now $(lower "$2")"
+}
+
+cmd_set() {
+  (($# == 2)) || die "usage: colorful-terminals set replace-group-keys yes|no"
+  [[ $1 == replace-group-keys ]] || die "unknown setting '$1'"
+  [[ $2 == yes || $2 == no ]] || die "replace-group-keys is yes or no"
+  lock_config
+  read_config
+  ((${#lines[@]})) || default_header
+  local i done=0 first_project=${project_lines[0]-${#lines[@]}}
+  for i in "${!lines[@]}"; do
+    _ct_parse_line "${lines[i]}"
+    if [[ $_ct_kind == setting && $_ct_key == "$1" ]]; then
+      lines[i]="$1 = $2"
+      done=1
+    fi
+  done
+  if ((!done)); then
+    lines=("${lines[@]:0:first_project}" "$1 = $2" "" "${lines[@]:first_project}")
+  fi
+  write_config
+  reload_hyprland
+  echo "$1 = $2"
+}
+
+# Keys read projects.conf when pressed; the reload only refreshes their names
+# in the keybindings list, and applies replace-group-keys.
+reload_hyprland() {
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE-} ]] && command -v hyprctl > /dev/null && has_block hyprland; then
+    timeout 5 hyprctl reload > /dev/null 2>&1 || true
+  fi
+}
+
+notify() {
+  local body=${2//[<>&]/}
+  if command -v notify-send > /dev/null; then
+    notify-send -a "Colorful Terminals" -- "$1" "${body:0:300}" || true
+  else
+    printf '%s: %s\n' "$1" "$body" >&2
+  fi
+}
+
+# App id for a project window. Two projects with the same folder name get the
+# project number appended, so each key finds its own window.
+app_id_for() {
+  local n=$1 i name mine="" count=0
+  for i in "${!_ct_paths[@]}"; do
+    name=${_ct_paths[i]##*/}
+    name=${name//[^A-Za-z0-9_]/_}
+    [[ -n $name ]] || name=root
+    ((i + 1 == n)) && mine=$name
+  done
+  for i in "${!_ct_paths[@]}"; do
+    name=${_ct_paths[i]##*/}
+    name=${name//[^A-Za-z0-9_]/_}
+    [[ -n $name ]] || name=root
+    [[ $name == "$mine" ]] && count=$((count + 1))
+  done
+  if ((count > 1)); then
+    printf 'org.omarchy.project_%s_%s' "$mine" "$n"
+  else
+    printf 'org.omarchy.project_%s' "$mine"
+  fi
+}
+
+cmd_open() {
+  (($# == 1)) && [[ $1 =~ ^[0-9]+$ ]] || die "usage: colorful-terminals open <n>"
+  local n=$1
+  _ct_load
+  if ((n < 1 || n > ${#_ct_paths[@]})); then
+    # A key without a project opens the panel, so the fix is one step away.
+    exec omarchy-shell shell summon "$PLUGIN_ID" '{}'
+  fi
+  local dir=${_ct_paths[$((n - 1))]} app_id
+  if [[ ! -d $dir ]]; then
+    notify "Project folder not found" "$(display_path "$dir") no longer exists. Press Super+Alt+0 to fix the list."
+    exit 1
+  fi
+  app_id=$(app_id_for "$n")
+  exec omarchy-launch-or-focus "$app_id" \
+    "uwsm-app -- xdg-terminal-exec --app-id=$app_id --dir=$(printf '%q' "$dir")"
+}
+
+# ------------------------------------------------------------- panel queries
+
+cmd_state() {
+  read_config
+  local fields=() problems=() i line
+  for i in "${!project_lines[@]}"; do
+    parse_project $((i + 1))
+    fields+=("$_ct_path_text" "$_ct_path" "$_ct_color" "$([[ -d $_ct_path ]] && echo 1 || echo 0)")
+  done
+  _ct_load
+  for i in "${!lines[@]}"; do
+    line=${lines[i]}
+    _ct_parse_line "$line"
+    [[ $_ct_kind == problem ]] && problems+=("$((i + 1))" "${line:0:200}")
+    if [[ $_ct_kind == setting && $_ct_key != replace-group-keys ]]; then
+      problems+=("$((i + 1))" "${line:0:200}")
+    fi
+  done
+  local palette=() status
+  for i in "${!palette_colors[@]}"; do palette+=("${palette_names[i]}" "${palette_colors[i]}"); done
+  status=$(integration_json)
+  jq -n -c \
+    --arg file "$(display_path "$_ct_file")" \
+    --arg replace "$_ct_replace_group_keys" \
+    --argjson integration "$status" \
+    --argjson projects "$(json_groups 4 "${fields[@]}")" \
+    --argjson problems "$(json_groups 2 "${problems[@]}")" \
+    --argjson palette "$(json_groups 2 "${palette[@]}")" \
+    '{
+      file: $file,
+      replaceGroupKeys: ($replace == "yes"),
+      integration: $integration,
+      projects: [$projects | to_entries[] | {
+        n: (.key + 1), path: .value[0], abs: .value[1], color: (.value[2] | ascii_downcase),
+        name: (.value[1] | if . == "/" then "/" else split("/") | last end),
+        exists: (.value[3] == "1")
+      }],
+      problems: [$problems[] | {line: (.[0] | tonumber), text: .[1]}],
+      palette: [$palette[] | {name: .[0], color: .[1]}]
+    }'
+}
+
+# Prints the arguments as a JSON array of arrays, <size> items each.
+json_groups() {
+  local size=$1
+  shift
+  jq -n -c --argjson size "$size" '$ARGS.positional as $a | [range(0; $a | length; $size) as $i | $a[$i:$i + $size]]' --args "$@"
+}
+
+cmd_scan() {
+  local current="" repos
+  if command -v omarchy-cmd-terminal-cwd > /dev/null && [[ -n ${HYPRLAND_INSTANCE_SIGNATURE-} ]]; then
+    current=$(timeout 2 omarchy-cmd-terminal-cwd 2> /dev/null | head -c 4096 | head -n 1) || current=""
+  fi
+  [[ $current == "$HOME" || ! -d $current ]] && current=""
+  repos=$(find_repos)
+  jq -n -c \
+    --arg current "$([[ -n $current ]] && display_path "$current")" \
+    --argjson repos "$repos" \
+    --argjson conflicts "$(find_conflicts)" \
+    '{currentDir: $current, repos: $repos, conflicts: $conflicts}'
+}
+
+# Git repositories in ~ and ~/Projects, most recently used first.
+find_repos() {
+  local list=() path found
+  found=$(
+    {
+      timeout 3 find "$HOME" -mindepth 1 -maxdepth 2 \( -path "$HOME/.*" -prune \) -o -name .git -printf '%T@\t%h\n' 2> /dev/null || true
+      for path in "$HOME/Projects" "$HOME/projects"; do
+        [[ -d $path ]] || continue
+        timeout 3 find "$path" -mindepth 1 -maxdepth 3 \( -name '.?*' ! -name .git -prune \) -o -name .git -printf '%T@\t%h\n' 2> /dev/null || true
+      done
+    } | sort -t $'\t' -k1,1nr | cut -f2- | awk '!seen[$0]++' | head -n 40
+  ) || true
+  while IFS= read -r path; do
+    [[ -n $path && $path != *$'\t'* ]] || continue
+    list+=("$(display_path "$path")")
+  done <<< "$found"
+  jq -n -c '$ARGS.positional' --args "${list[@]}"
+}
+
+# Other Super+Alt+digit keys, so the panel can show them instead of silently
+# fighting over them. Reads the text form of `hyprctl binds`: in the JSON form,
+# keys bound by keycode (Omarchy's "SUPER + ALT + code:10") have no key at all.
+# Our own keys are recognized by their descriptions (see hypr/keys.lua).
+find_conflicts() {
+  if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE-} ]] || ! command -v hyprctl > /dev/null; then
+    echo '[]'
+    return
+  fi
+  { timeout 3 hyprctl binds 2> /dev/null || true; } | head -c 4000000 | binds_to_conflicts
+}
+
+# Text of `hyprctl binds` on stdin -> JSON conflicts on stdout.
+binds_to_conflicts() {
+  awk '
+    function flush() {
+      if (mods == "72" && submap == "") {
+        digit = ""; by_code = "false"
+        if (key ~ /code:1[0-9]$/) { code = substr(key, length(key) - 1) + 0; digit = (code - 9) % 10; by_code = "true" }
+        else if (key ~ /^[0-9]$/) digit = key
+        if (digit != "" && desc !~ /^(Project [1-9]|Colorful Terminals)/) {
+          gsub(/[\t\r]/, " ", desc)
+          printf "%s\t%s\t%s\n", digit, by_code, substr(desc, 1, 80)
+        }
+      }
+      mods = ""; submap = ""; key = ""; desc = ""
+    }
+    /^[^\t]/ { flush(); next }
+    /^\tmodmask: / { mods = substr($0, 11) }
+    /^\tsubmap: / { submap = substr($0, 10) }
+    /^\tkey: / { key = substr($0, 7) }
+    /^\tdescription: / { desc = substr($0, 15) }
+    END { flush() }
+  ' | jq -R -s -c '
+    [split("\n")[] | select(length > 0) | split("\t")
+     | {digit: (.[0] | tonumber), byCode: (.[1] == "true"),
+        description: (if .[2] == "" then "(no description)" else .[2] end)}]
+    | sort_by(.digit)'
+}
+
+cmd_dirs() {
+  (($# == 1)) || die "usage: colorful-terminals dirs <path>"
+  local query=$1 base prefix list=() entry
+  case $query in
+    "~") query="~/" ;;
+  esac
+  case $query in
+    "~/"*) base=$HOME/${query:2} ;;
+    /*) base=$query ;;
+    *) echo '[]'; return ;;
+  esac
+  prefix=${base##*/}
+  base=${base%/*}
+  [[ -n $base ]] || base=/
+  [[ -d $base ]] || { echo '[]'; return; }
+  shopt -s nullglob
+  [[ $prefix == .* ]] && shopt -s dotglob
+  for entry in "${base%/}"/"$prefix"*/; do
+    entry=${entry%/}
+    [[ $entry == *[$'\n\t']* ]] && continue
+    list+=("$(display_path "$entry")")
+    ((${#list[@]} < 50)) || break
+  done
+  jq -n -c '$ARGS.positional' --args "${list[@]}"
+}
+
+# --------------------------------------------------------------- integration
+
+targets=(bashrc hyprland menu)
+
+target_file() {
+  case $1 in
+    bashrc) printf '%s' "$HOME/.bashrc" ;;
+    hyprland) printf '%s' "$HOME/.config/hypr/hyprland.lua" ;;
+    menu) printf '%s' "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ;;
+  esac
+}
+
+target_comment() {
+  case $1 in
+    bashrc) printf '#' ;;
+    hyprland) printf -- '--' ;;
+    menu) printf '  //' ;;
+  esac
+}
+
+begin_marker() { printf '%s BEGIN colorful-terminals' "$(target_comment "$1")"; }
+end_marker() { printf '%s END colorful-terminals' "$(target_comment "$1")"; }
+
+# A path written relative to $HOME when possible, so synced dotfiles keep working.
+bash_path() {
+  if [[ $1 == "$HOME"/* ]]; then
+    # shellcheck disable=SC2016 # $HOME is written literally into ~/.bashrc
+    printf '"$HOME"/%q' "${1#"$HOME"/}"
+  else
+    printf '%q' "$1"
+  fi
+}
+
+lua_string() {
+  local s=${1//\\/\\\\}
+  printf '"%s"' "${s//\"/\\\"}"
+}
+
+lua_path() {
+  if [[ $1 == "$HOME"/* ]]; then
+    printf 'os.getenv("HOME") .. %s' "$(lua_string "/${1#"$HOME"/}")"
+  else
+    lua_string "$1"
+  fi
+}
+
+block_body() {
+  local hook="$plugin_dir/shell/colorful-terminals.bash"
+  case $1 in
+    bashrc)
+      printf 'if [[ -r %s ]]; then source %s; fi\n' "$(bash_path "$hook")" "$(bash_path "$hook")"
+      ;;
+    hyprland)
+      printf 'do local dir = %s; local f = io.open(dir .. "/hypr/keys.lua"); if f then f:close(); dofile(dir .. "/hypr/keys.lua")(dir) end end\n' \
+        "$(lua_path "$plugin_dir")"
+      ;;
+    menu)
+      printf '  "style.colorful-terminals": {"icon":"󰏘","label":"Colorful Terminals","description":"Terminal color and Super+Alt key for each project","action":"omarchy-shell shell toggle %s '"'"'{}'"'"'"},\n' "$PLUGIN_ID"
+      ;;
+  esac
+}
+
+block_text() {
+  printf '%s (Colorful Terminals plugin; undo: colorful-terminals integration uninstall)\n' "$(begin_marker "$1")"
+  block_body "$1"
+  printf '%s\n' "$(end_marker "$1")"
+}
+
+has_block() {
+  local file
+  file=$(target_file "$1")
+  [[ -f $file ]] && grep -qF -- "$(begin_marker "$1")" "$file"
+}
+
+integration_json() {
+  local t args=()
+  for t in "${targets[@]}"; do
+    if has_block "$t"; then args+=(--argjson "$t" true); else args+=(--argjson "$t" false); fi
+  done
+  jq -n -c "${args[@]}" '{bashrc: $bashrc, hyprland: $hyprland, menu: $menu,
+    installed: ($bashrc and $hyprland and $menu)}'
+}
+
+where_text() {
+  case $1 in
+    bashrc) echo "at the end" ;;
+    hyprland) echo "at the end" ;;
+    menu) echo "at the top; shows up in the menu under Style" ;;
+  esac
+}
+
+cmd_integration() {
+  local action=${1-status} yes=0
+  shift || true
+  [[ ${1-} == --yes || ${1-} == -y ]] && yes=1
+  case $action in
+    status) integration_status ;;
+    preview) integration_preview ;;
+    install) confirm "$yes" "Add these blocks?" integration_preview && integration_install ;;
+    uninstall) confirm "$yes" "Remove the Colorful Terminals blocks?" true && integration_uninstall ;;
+    *) die "integration status|preview|install|uninstall" ;;
+  esac
+}
+
+confirm() {
+  local yes=$1 question=$2 show=$3 answer
+  ((yes)) && return 0
+  [[ -t 0 ]] || die "run this in a terminal, or add --yes to confirm"
+  "$show"
+  read -r -p "$question [y/N] " answer
+  [[ $answer == [yY]* ]] || die "nothing changed"
+}
+
+integration_status() {
+  local t
+  for t in "${targets[@]}"; do
+    if has_block "$t"; then
+      printf 'installed      %s\n' "$(display_path "$(target_file "$t")")"
+    else
+      printf 'not installed  %s\n' "$(display_path "$(target_file "$t")")"
+    fi
+  done
+}
+
+integration_preview() {
+  local t file
+  for t in "${targets[@]}"; do
+    file=$(target_file "$t")
+    printf '%s  (%s%s)\n' "$(display_path "$file")" "$(where_text "$t")" "$([[ -f $file ]] || echo "; the file will be created")"
+    block_text "$t" | sed 's/^/    /'
+    echo
+  done
+  printf 'A backup of each file goes to %s first.\n' "$(display_path "$backup_dir")"
+}
+
+# The real file behind a path, so a symlinked ~/.bashrc (stow, chezmoi) stays a symlink.
+real_file() { readlink -f -- "$1"; }
+
+backup_file() {
+  local name=$1 file=$2
+  mkdir -p "$backup_dir"
+  cp -p -- "$file" "$backup_dir/$name.$(date +%Y%m%d-%H%M%S)"
+}
+
+# Writes stdin to a file atomically, keeping its permissions.
+replace_file() {
+  local file=$1 tmp
+  tmp=$(mktemp "${file%/*}/.colorful-terminals.XXXXXX")
+  cat > "$tmp"
+  if [[ -e $file ]]; then chmod --reference="$file" "$tmp"; else chmod 644 "$tmp"; fi
+  mv -f "$tmp" "$file"
+}
+
+# Prints a file without the marked block.
+strip_block() {
+  local file=$1 begin=$2 end=$3 line inside=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    if ((inside)); then
+      [[ $line == "$end" ]] && inside=0
+      continue
+    fi
+    if [[ $line == "$begin"* ]]; then
+      inside=1
+      continue
+    fi
+    printf '%s\n' "$line"
+  done < "$file"
+}
+
+integration_install() {
+  local t
+  for t in "${targets[@]}"; do install_block "$t"; done
+  echo "Installed. Open a new terminal to see project colors; Super+Alt+0 opens the settings."
+}
+
+install_block() {
+  local t=$1 path file source
+  path=$(target_file "$t")
+  file=$(real_file "$path")
+  mkdir -p "$backup_dir" "${file%/*}"
+  source=$(mktemp "$backup_dir/.source.XXXXXX")
+
+  if [[ -f $file ]]; then
+    backup_file "$t" "$file"
+    if has_block "$t"; then
+      # Already there: refresh the block in place, e.g. after the plugin moved.
+      strip_block "$file" "$(begin_marker "$t")" "$(end_marker "$t")" > "$source"
+    else
+      cp -p -- "$file" "$backup_dir/$t.original"
+      rm -f -- "$backup_dir/$t.created"
+      cat -- "$file" > "$source"
+    fi
+  else
+    : > "$backup_dir/$t.created"
+    rm -f -- "$backup_dir/$t.original"
+    [[ $t != menu ]] || printf '{\n}\n' > "$source"
+  fi
+  write_with_block "$t" "$file" "$source"
+  rm -f -- "$source"
+  printf '  added block to %s\n' "$(display_path "$path")"
+}
+
+# Writes <source> plus the block to <file>: right after the opening "{" for
+# the menu, at the end for the others.
+write_with_block() {
+  local t=$1 file=$2 source=$3 block line placed=0
+  block=$(block_text "$t")
+  if [[ $t == menu ]]; then
+    grep -qE '^[[:space:]]*\{' "$source" ||
+      die "could not find the opening { in $(display_path "$file"); nothing changed there"
+    while IFS= read -r line || [[ -n $line ]]; do
+      printf '%s\n' "$line"
+      if ((!placed)) && [[ $line =~ ^[[:space:]]*\{ ]]; then
+        printf '%s\n' "$block"
+        placed=1
+      fi
+    done < "$source" | replace_file "$file"
+  else
+    {
+      cat -- "$source"
+      # Start on a fresh line if the file did not end with one.
+      [[ ! -s $source || $(tail -c 1 -- "$source" | od -An -tx1) == *0a* ]] || echo
+      printf '%s\n' "$block"
+    } | replace_file "$file"
+  fi
+}
+
+integration_uninstall() {
+  local t path file stripped
+  for t in "${targets[@]}"; do
+    path=$(target_file "$t")
+    file=$(real_file "$path")
+    if ! has_block "$t"; then
+      printf '  nothing to remove in %s\n' "$(display_path "$path")"
+      continue
+    fi
+    backup_file "$t" "$file"
+    stripped=$(mktemp "$backup_dir/.stripped.XXXXXX")
+    strip_block "$file" "$(begin_marker "$t")" "$(end_marker "$t")" > "$stripped"
+
+    if [[ -f $backup_dir/$t.created ]] && is_empty_skeleton "$t" "$stripped"; then
+      rm -f -- "$file" "$stripped" "$backup_dir/$t.created"
+      printf '  removed %s (the plugin had created it)\n' "$(display_path "$path")"
+      continue
+    fi
+    # The original had no final newline: give back the exact original bytes.
+    if [[ -f $backup_dir/$t.original ]] && cmp -s <(cat -- "$backup_dir/$t.original"; echo) "$stripped"; then
+      cp -- "$backup_dir/$t.original" "$stripped"
+    fi
+    replace_file "$file" < "$stripped"
+    rm -f -- "$stripped" "$backup_dir/$t.original" "$backup_dir/$t.created"
+    printf '  removed block from %s\n' "$(display_path "$path")"
+  done
+  echo "Uninstalled. New terminals use the theme color; backups are in $(display_path "$backup_dir")."
+}
+
+is_empty_skeleton() {
+  local content
+  content=$(tr -d '[:space:]' < "$2")
+  if [[ $1 == menu ]]; then [[ $content == "{}" ]]; else [[ -z $content ]]; fi
+}
+
+# ---------------------------------------------------------------------- main
+
+main() {
+  local command=${1-}
+  shift || true
+  case $command in
+    list) cmd_list "$@" ;;
+    add) cmd_add "$@" ;;
+    remove) cmd_remove "$@" ;;
+    move) cmd_move "$@" ;;
+    color) cmd_color "$@" ;;
+    set) cmd_set "$@" ;;
+    open) cmd_open "$@" ;;
+    state) cmd_state "$@" ;;
+    scan) cmd_scan "$@" ;;
+    dirs) cmd_dirs "$@" ;;
+    integration) cmd_integration "$@" ;;
+    "" | -h | --help | help) usage ;;
+    *) die "unknown command '$command' (try --help)" ;;
+  esac
+}
+
+main "$@"

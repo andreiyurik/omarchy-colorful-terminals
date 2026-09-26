@@ -1,0 +1,4 @@
+# "~/" is matched literally on purpose: the config stores folders as ~/path.
+disable=SC2088
+external-sources=true
+source-path=SCRIPTDIR/..
