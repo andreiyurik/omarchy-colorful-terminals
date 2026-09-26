@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "andreiyurik.colorful-terminals",
+  "name": "Colorful Terminals",
+  "version": "0.2.0",
+  "author": "Andrei Yurik",
+  "license": "MIT",
+  "homepage": "https://github.com/andreiyurik/omarchy-colorful-terminals",
+  "description": "Give every project its own terminal color, so you always know where you are. Super+Alt+1…9 opens a project or jumps to its open window. Works with any project launcher.",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Panel.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Colorful Terminals",
+    "description": "Opens the Colorful Terminals panel: project colors and Super+Alt keys",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
