@@ -49,6 +49,16 @@ eq "uninstall restores every file byte for byte" "$before" "$(snapshot)"
 ok "uninstall again is harmless" "$helper" integration uninstall --yes
 eq "still the original" "$before" "$(snapshot)"
 
+echo "integration: key choice at install"
+omarchy_home
+eq "no key setting before install" "false" "$("$helper" state | jq '.replaceGroupKeysSet')"
+ok "install with project keys first" "$helper" integration install --yes --replace-group-keys yes
+eq "choice saved" "true" "$("$helper" state | jq '.replaceGroupKeys and .replaceGroupKeysSet')"
+fails "bad key choice refused" "$helper" integration install --yes --replace-group-keys maybe
+fails "unknown option refused" "$helper" integration install --yes --force
+ok "keep Omarchy's keys" "$helper" integration install --yes --replace-group-keys no
+eq "choice changed" "false" "$("$helper" state | jq '.replaceGroupKeys')"
+
 echo "integration: unusual files"
 omarchy_home
 printf 'alias ll="ls -l"' > "$(bashrc)"   # no final newline

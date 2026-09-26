@@ -48,12 +48,17 @@ if (fs.existsSync(themeDir)) {
 }
 
 console.log("model: palette")
-eq("ten colors", 10, palette.length)
+eq("eight colors", 8, palette.length)
+// Swatches must be told apart at a glance: no two closer than 6% of the RGB cube.
+let closest = 1
+for (let i = 0; i < palette.length; i++)
+  for (let j = i + 1; j < palette.length; j++) closest = Math.min(closest, M.distance(palette[i].color, palette[j].color))
+eq("palette colors are far apart", true, closest > 0.06)
 const projects = [{ n: 1, path: "~/a", color: "#1a3a5a" }]
 eq("free color skips used", "#213f12", M.freeColor(palette, projects, "#d8dee9", "#2e3440"))
 eq("free color skips poor ones", "#213f12", M.freeColor([{ name: "x", color: "#2e3440" }].concat(palette), projects, "#d8dee9", "#2e3440"))
 eq("step right", "#213f12", M.stepColor(palette, "#1a3a5a", 1))
-eq("step left wraps", "#13402a", M.stepColor(palette, "#1a3a5a", -1))
+eq("step left wraps", palette[palette.length - 1].color, M.stepColor(palette, "#1a3a5a", -1))
 eq("custom steps onto palette", "#1a3a5a", M.stepColor(palette, "#abcdef", 1))
 eq("color name", "Blue", M.colorName(palette, "#1A3A5A"))
 eq("custom color name", "#abcdef", M.colorName(palette, "#abcdef"))
