@@ -1,6 +1,12 @@
 # Colorful Terminals for Omarchy
 
+[![Tests](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml/badge.svg)](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml)
+[![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-81a1c1)](https://omarchy.org/)
+[![MIT license](https://img.shields.io/github/license/andreiyurik/omarchy-colorful-terminals?color=9ece6a)](LICENSE)
+
 Give every project its own terminal color, so you always know which project a terminal belongs to.
+
+An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, and `Super+Alt+1…9` hotkeys that open a project or jump to its window.
 
 ![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
 
@@ -105,6 +111,20 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 - **Made for dark themes.** On a light theme the panel warns you, and marks any color that would make text hard to read.
 - A program that paints its own background, such as a full-screen editor theme, covers the color while it runs.
 - Folder names containing ` # ` (space, hash, space) or line breaks are not supported.
+
+## FAQ
+
+**How do I change the terminal background color per directory?**
+Add the folder in the panel. The bash hook sends the standard OSC 11 escape code whenever you enter it, and OSC 111 to restore the theme color when you leave.
+
+**Does it work with my terminal?**
+With any terminal that supports OSC 11: Ghostty (Omarchy's default), Kitty, Alacritty and foot all do.
+
+**Can I tell projects apart at a glance in Hyprland?**
+Yes: every project terminal has its own color, and its window gets the app id `org.omarchy.project_<name>`, so `Super+Alt+N` finds it again instead of opening a second one.
+
+**Does it need a project launcher?**
+No, and it works alongside one. The color depends only on the current folder.
 
 ## Development
 
