@@ -1,0 +1,121 @@
+# Colorful Terminals for Omarchy
+
+Give every project its own terminal color, so you always know which project a terminal belongs to.
+
+![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
+
+- **Automatic.** `cd` into a project and the background turns its color. Leave it and the theme color comes back. Subfolders keep the project color; a project inside another project keeps its own.
+- **Project keys.** `Super+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
+- **One small panel.** Add folders, pick colors, and reorder, all from the keyboard. Every change is saved as you make it.
+
+It keys off the folder, not the way the terminal was opened, so it works with any project launcher (Project Launcher, Tableau, a tmux sessionizer, or plain `cd`).
+
+## Install
+
+```bash
+omarchy plugin add https://github.com/andreiyurik/omarchy-colorful-terminals --enable
+```
+
+Then open the panel once:
+
+```bash
+omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'
+```
+
+1. Press **Enter** to add the folder you are in, or pick one of your git repositories.
+2. Press **I** to turn it on. The panel first shows the exact lines it will add (see [What it changes](#what-it-changes)).
+3. Open a new terminal in that folder. Its background has the project color.
+
+After that, the palette icon in the bar, `Super+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`.
+
+## Keys
+
+| Keys | What it does |
+|---|---|
+| `Super+Alt+1` … `Super+Alt+9` | Open project N, or jump to its open window |
+| `Super+Alt+0` | Open the settings panel |
+
+In the panel:
+
+| Keys | What it does |
+|---|---|
+| `↑` `↓` | Select a project |
+| `←` `→` | Change its color |
+| `Shift+↑` `Shift+↓` | Move it up or down; this changes its key number |
+| `#` | Type a custom color, like `#1a3a5a` |
+| `Enter` | Open the selected project |
+| `Del` | Remove it (`Ctrl+Z` puts it back) |
+| `A` | Add a project (`Tab` completes a path) |
+| `G` | Let project keys replace other `Super+Alt+digit` keys (shown only on a clash) |
+| `Ctrl+U` | Uninstall the integration (press twice) |
+| `Esc` | Close |
+
+The hints are always shown at the bottom of the panel.
+
+## The settings file
+
+Everything lives in one file you can also edit by hand:
+`~/.config/colorful-terminals/projects.conf`. The panel picks up your edits
+while it is open, and new prompts use them right away.
+
+```
+# folder                color
+~/code/shop             #1a3a5a
+~/code/blog             #213f12     # anything after " # " is a comment
+~/work/api-gateway      #681e1e
+replace-group-keys = no
+```
+
+The first project line opens with `Super+Alt+1`, the second with `Super+Alt+2`, and so on. You can have more than nine projects: the rest get colors but no key.
+
+## What it changes
+
+The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to three files, and only after you press **I** in the panel:
+
+| File | What the block does |
+|---|---|
+| `~/.bashrc` | Sources the hook that sets the terminal color before each prompt |
+| `~/.config/hypr/hyprland.lua` | Loads the `Super+Alt+0…9` keys |
+| `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Adds **Style › Colorful Terminals** to the Omarchy menu |
+
+Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink.
+
+`Super+Alt+1…5` are also Omarchy's "switch to group window" keys. The panel lists every key that clashes and never replaces one unless you tick the box. Nothing needs sudo, nothing goes over the network, and nothing is collected.
+
+## Remove
+
+1. In the panel, press `Ctrl+U` twice. This removes the three blocks and gives each file back exactly as it was (any edits you made since are kept). The same thing from a terminal:
+
+   ```bash
+   ~/.config/omarchy/plugins/andreiyurik.colorful-terminals/bin/colorful-terminals integration uninstall
+   ```
+
+2. Remove the plugin:
+
+   ```bash
+   omarchy plugin remove andreiyurik.colorful-terminals
+   ```
+
+Your project list and the backups stay in `~/.config/colorful-terminals/`. Delete that folder if you do not want them. If you remove the plugin first, the blocks stay behind but do nothing; delete the lines between the `BEGIN` and `END` markers by hand.
+
+## Limitations
+
+- **The color changes at the next prompt.** It switches when a command finishes and bash draws its prompt, not in the middle of a running script.
+- **bash only**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Not zsh or fish, and not inside tmux or zellij yet.
+- **Made for dark themes.** On a light theme the panel warns you, and marks any color that would make text hard to read.
+- A program that paints its own background, such as a full-screen editor theme, covers the color while it runs.
+- Folder names containing ` # ` (space, hash, space) or line breaks are not supported.
+
+## Development
+
+```bash
+tests/run              # every test, in a temporary HOME
+tests/render-panel out # screenshots of the panel in each state
+tests/render-preview   # regenerate preview.png
+```
+
+The tests never touch your real `~/.bashrc` or `~/.config`.
+
+## License
+
+[MIT](LICENSE)
