@@ -1,0 +1,35 @@
+#!/bin/bash
+# Runs every test. Each one uses a temporary HOME; your real config is never
+# touched. Tests whose tool is missing are skipped, not failed.
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
+status=0
+
+run() {
+  local name=$1
+  shift
+  echo "== $name"
+  "$@" || status=1
+}
+
+have() { command -v "$1" > /dev/null; }
+
+if have shellcheck; then
+  run shellcheck shellcheck -x bin/colorful-terminals shell/colorful-terminals.bash lib/config.bash tests/*.sh tests/lib.bash tests/run tests/render-panel tests/panel-runtime
+fi
+run config bash tests/config.test.sh
+run integration bash tests/integration.test.sh
+if have lua; then
+  home=$(mktemp -d)
+  run keys env HOME="$home" lua tests/keys.test.lua "$PWD"
+  rm -rf "$home"
+else
+  echo "== keys: SKIP (needs lua)"
+fi
+if have node; then run model node tests/model.test.js; else echo "== model: SKIP (needs node)"; fi
+if have omarchy; then run manifest omarchy plugin validate .; fi
+run panel tests/render-panel
+run panel-runtime tests/panel-runtime
+
+if ((status == 0)); then echo "All tests passed."; else echo "Some tests failed."; fi
+exit "$status"

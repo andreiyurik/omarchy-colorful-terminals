@@ -1,0 +1,27 @@
+#!/bin/bash
+# Runs the real Panel.qml offscreen against the helper, with a temporary HOME.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+shell_dir=${OMARCHY_PATH:-/usr/share/omarchy}/shell
+if ! command -v quickshell > /dev/null || [[ ! -d $shell_dir/Commons ]]; then
+  echo "SKIP: panel-runtime needs quickshell and the Omarchy shell"
+  exit 0
+fi
+work=$(mktemp -d)
+trap '[[ -n ${KEEP-} ]] || rm -rf "$work"' EXIT
+ln -s "$shell_dir/Commons" "$work/Commons"
+ln -s "$shell_dir/Ui" "$work/Ui"
+cp -r Panel.qml PanelSurface.qml ProjectsView.qml ProjectRow.qml Notice.qml Model.js bin lib "$work/"
+cp tests/panel/shell.qml "$work/shell.qml"
+home="$work/home"
+mkdir -p "$home/first" "$home/second" "$home/.config/colorful-terminals" "$home/.local/state"
+ln -s "$HOME/.local/state/omarchy" "$home/.local/state/omarchy" 2> /dev/null || true
+printf '~/first  #1a3a5a\n' > "$home/.config/colorful-terminals/projects.conf"
+HOME="$home" CT_TEST_DIR="$home" QT_QPA_PLATFORM=offscreen HYPRLAND_INSTANCE_SIGNATURE="" \
+  timeout 30s quickshell --no-color -p "$work/shell.qml" > "$work/log" 2>&1 || true
+grep -E 'PASS|FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|rror' "$work/log" | grep -v WARN || true
+if grep -qE 'FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|Failed to load' "$work/log" || ! grep -q 'PASS: toggle closes' "$work/log"; then
+  echo "panel-runtime: FAILED"
+  exit 1
+fi
+echo "panel-runtime: ok"
