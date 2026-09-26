@@ -329,7 +329,7 @@ app_id_for() {
 }
 
 cmd_open() {
-  (($# == 1)) && [[ $1 =~ ^[0-9]+$ ]] || die "usage: colorful-terminals open <n>"
+  if (($# != 1)) || [[ ! $1 =~ ^[0-9]+$ ]]; then die "usage: colorful-terminals open <n>"; fi
   local n=$1
   _ct_load
   if ((n < 1 || n > ${#_ct_paths[@]})); then
