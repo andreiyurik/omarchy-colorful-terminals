@@ -21,7 +21,7 @@ Column {
     textFormat: Text.PlainText
     width: parent.width
     wrapMode: Text.WordWrap
-    text: "This adds a marked block to three files. A backup of each is saved first, and Turn off takes the blocks out again."
+    text: "This adds a marked block to each file below. A backup of each is saved first, and Turn off takes the blocks out again."
     color: setup.view.dim
     font.family: setup.view.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -34,11 +34,14 @@ Column {
     leftPadding: Style.space(10)
 
     Repeater {
-      model: [
-        "~/.bashrc", "colors terminals as you cd",
-        "~/.config/hypr/hyprland.lua", "Super+Alt+0–9 keys",
-        "Omarchy menu", "Style › Colorful Terminals"
-      ]
+      // Pairs of file and purpose, from the helper: bash always, zsh and fish
+      // when this system uses them, then Hyprland and the menu.
+      model: {
+        var files = (setup.view.config.integration && setup.view.config.integration.files) || []
+        var out = []
+        for (var i = 0; i < files.length; i++) out.push(files[i].file, files[i].what)
+        return out
+      }
       delegate: Text {
         required property var modelData
         required property int index

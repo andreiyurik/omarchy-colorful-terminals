@@ -15,12 +15,29 @@ ShellRoot {
     { name: "Violet", color: "#4c2276" }, { name: "Plum", color: "#621d4b" }, { name: "Brown", color: "#4c3316" },
     { name: "Indigo", color: "#262e82" }, { name: "Jade", color: "#13402a" }
   ]
+  readonly property var paletteLight: [
+    { name: "Blue", color: "#c3d9f7" }, { name: "Green", color: "#d4edbf" }, { name: "Red", color: "#f7c9c9" },
+    { name: "Violet", color: "#dccbf8" }, { name: "Pink", color: "#f8cce9" }, { name: "Peach", color: "#f5cda6" },
+    { name: "Lemon", color: "#eeeea0" }, { name: "Mint", color: "#bdeed8" }
+  ]
+  readonly property var bashFiles: [
+    { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Alt+0–9 keys" },
+    { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
+  ]
+  readonly property var allFiles: [
+    { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
+    { file: "~/.zshrc", what: "zsh: colors terminals as you cd" },
+    { file: "~/.config/fish/conf.d/colorful-terminals.fish", what: "fish: colors terminals as you cd" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Alt+0–9 keys" },
+    { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
+  ]
   function project(n, path, color, exists) {
     var name = path.split("/").pop()
     return { n: n, path: path, abs: path, color: color, name: name, exists: exists !== false }
   }
   function config(projects, extra) {
-    var c = { projects: projects, palette: palette, problems: [], integration: { installed: true },
+    var c = { projects: projects, palette: palette, paletteLight: paletteLight, problems: [], integration: { installed: true, files: bashFiles },
               replaceGroupKeys: false, replaceGroupKeysSet: false, file: "~/.config/colorful-terminals/projects.conf" }
     for (var k in extra || {}) c[k] = extra[k]
     return c
@@ -41,9 +58,9 @@ ShellRoot {
     { name: "main", select: 1, config: config(fourProjects), scan: { currentDir: "", repos: [], conflicts: groupKeys(5) } },
     { name: "empty", config: config([], { integration: { installed: false } }),
       scan: { currentDir: "~/code/omarchy-colorful-terminals", repos: ["~/code/omarchy-colorful-terminals", "~/code/shop", "~/code/blog", "~/Projects/dotfiles", "~/work/api-gateway"], conflicts: [] } },
-    { name: "setup", config: config(fourProjects.slice(0, 2), { integration: { installed: false }, problems: [{ line: 7, text: "~/notes   green" }] }),
+    { name: "setup", config: config(fourProjects.slice(0, 2), { integration: { installed: false, files: allFiles }, problems: [{ line: 7, text: "~/notes   green" }] }),
       scan: { currentDir: "", repos: [], conflicts: groupKeys(5) }, preview: previewText },
-    { name: "setup-lines", lines: true, config: config(fourProjects.slice(0, 1), { integration: { installed: false } }),
+    { name: "setup-lines", lines: true, config: config(fourProjects.slice(0, 1), { integration: { installed: false, files: bashFiles } }),
       scan: noScan, preview: previewText },
     { name: "add", mode: "add", query: "~/co", dirs: ["~/code", "~/company"],
       config: config(fourProjects.slice(0, 3)), scan: { currentDir: "~/code/shop", repos: ["~/code/shop"], conflicts: [] } },
@@ -53,7 +70,8 @@ ShellRoot {
       config: config([project(1, "~/code/shop", "#1a3a5a"), project(2, "~/old/gone", "#213f12", false)]), scan: noScan },
     { name: "undo", select: 0, undo: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
     { name: "turn-off", confirm: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
-    { name: "light", select: 0, light: true, config: config(fourProjects.slice(0, 3)), scan: noScan }
+    { name: "light", select: 0, light: true, config: config([project(1, "~/code/shop", "#c3d9f7"), project(2, "~/code/blog", "#d4edbf"),
+      project(3, "~/work/api-gateway", "#681e1e")]), scan: noScan }
   ]
 
   FloatingWindow {
@@ -168,12 +186,18 @@ ShellRoot {
     test.check("a path typed on the Russian layout is added", "add ~/code #621d4b", (view.lastRun = null, view.addHighlighted(), view.lastRun))
 
     test.load(test.scenarios[2])
+    test.check("readable colors are not flagged", false, view.colorsNeedWork)
     test.check("setup puts the cursor on Turn on", "install", view.target)
     test.check("turn on gives projects the keys by default", "integration install --yes --replace-group-keys yes", key(Qt.Key_Return))
     view.selected = view.targets.indexOf("setupKeys")
     key(Qt.Key_Space)
     view.selected = view.targets.indexOf("install")
     test.check("or keeps Omarchy's keys", "integration install --yes --replace-group-keys no", key(Qt.Key_Return))
+
+    test.load(test.scenarios[9])
+    test.check("a light theme gets the light palette", "#c3d9f7", view.palette[0].color)
+    test.check("a new project gets a light color", "add ~/code/new #f7c9c9", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
+    test.check("only the dark color is flagged", true, view.colorsNeedWork)
 
     test.load(test.scenarios[6])
     view.selected = 1

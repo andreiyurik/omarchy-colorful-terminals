@@ -22,6 +22,9 @@ max_keys=9
 # to tell at a glance, dark enough for light text on every dark Omarchy theme.
 palette_names=(Blue Green Red Violet Plum Brown Indigo Jade)
 palette_colors=("#1a3a5a" "#213f12" "#681e1e" "#4c2276" "#621d4b" "#4c3316" "#262e82" "#13402a")
+# The same idea for light themes: pale tints that keep dark text readable.
+light_names=(Blue Green Red Violet Pink Peach Lemon Mint)
+light_colors=("#c3d9f7" "#d4edbf" "#f7c9c9" "#dccbf8" "#f8cce9" "#f5cda6" "#eeeea0" "#bdeed8")
 
 usage() {
   cat <<EOF
@@ -365,8 +368,9 @@ cmd_state() {
     fi
     [[ $_ct_kind == setting && $_ct_key == replace-group-keys ]] && replace_set=true
   done
-  local palette=() status
+  local palette=() light=() status
   for i in "${!palette_colors[@]}"; do palette+=("${palette_names[i]}" "${palette_colors[i]}"); done
+  for i in "${!light_colors[@]}"; do light+=("${light_names[i]}" "${light_colors[i]}"); done
   status=$(integration_json)
   jq -n -c \
     --arg file "$(display_path "$_ct_file")" \
@@ -376,6 +380,7 @@ cmd_state() {
     --argjson projects "$(json_groups 4 "${fields[@]}")" \
     --argjson problems "$(json_groups 2 "${problems[@]}")" \
     --argjson palette "$(json_groups 2 "${palette[@]}")" \
+    --argjson light "$(json_groups 2 "${light[@]}")" \
     '{
       file: $file,
       replaceGroupKeys: ($replace == "yes"),
@@ -387,7 +392,8 @@ cmd_state() {
         exists: (.value[3] == "1")
       }],
       problems: [$problems[] | {line: (.[0] | tonumber), text: .[1]}],
-      palette: [$palette[] | {name: .[0], color: .[1]}]
+      palette: [$palette[] | {name: .[0], color: .[1]}],
+      paletteLight: [$light[] | {name: .[0], color: .[1]}]
     }'
 }
 

@@ -49,14 +49,21 @@ FocusScope {
   property bool busy: false
 
   readonly property var projects: (config && config.projects) || []
-  readonly property var palette: (config && config.palette) || []
+  readonly property bool lightTheme: Model.isLightTheme(String(themeBackground))
+  // Pale tints on a light theme, deep ones on a dark theme.
+  readonly property var palette: (config && (lightTheme && config.paletteLight && config.paletteLight.length
+    ? config.paletteLight : config.palette)) || []
+  readonly property bool colorsNeedWork: {
+    for (var i = 0; i < projects.length; i++)
+      if (Model.colorIssue(projects[i].color, String(themeText), String(themeBackground))) return true
+    return false
+  }
   readonly property bool empty: loaded && projects.length === 0
   readonly property bool installed: !!(config && config.integration && config.integration.installed)
   readonly property bool adding: mode === "add" || empty
   readonly property bool needsSetup: loaded && !installed && projects.length > 0
   readonly property var conflicts: Model.conflictsFor(scan.conflicts, projects.length)
   readonly property bool showKeys: installed && (conflicts.length > 0 || !!config.replaceGroupKeys)
-  readonly property bool lightTheme: Model.isLightTheme(String(themeBackground))
   readonly property var rows: Model.suggestions(query, scan.currentDir, scan.repos, dirs, projects)
 
   // Everything the keyboard cursor can land on, top to bottom.
@@ -120,7 +127,8 @@ FocusScope {
       flash("On")
       selectAfterRefresh = 0
       note = projects.length
-        ? "Colorful Terminals is on. Press Enter to open " + Model.plain(projects[0].name, 40) + " in its color."
+        ? "Colorful Terminals is on. Press Enter to open " + Model.plain(projects[0].name, 40)
+          + " in its color. Terminals that were already open get colors once you open them again."
         : "Colorful Terminals is on."
     } else if (args[0] === "integration" && args[1] === "uninstall") {
       note = "Turned off. New terminals use the theme color; your projects are kept."
@@ -353,7 +361,7 @@ FocusScope {
     parent: projectsView.dialogHost || view
     anchors.fill: parent
     z: 100
-    message: "Turn off Colorful Terminals? This takes its blocks out of ~/.bashrc, hyprland.lua and the Omarchy menu. Your projects are kept."
+    message: "Turn off Colorful Terminals? This takes its blocks out of your shell, Hyprland and menu config. Your projects are kept."
     confirmText: "Turn off"
     fontFamily: projectsView.fontFamily
     background: Color.menu.background
@@ -415,7 +423,7 @@ FocusScope {
     Column {
       width: parent.width
       spacing: Style.spacing.sm
-      visible: projectsView.error !== "" || projectsView.note !== "" || problemsText.problems.length > 0 || projectsView.lightTheme
+      visible: projectsView.error !== "" || projectsView.note !== "" || problemsText.problems.length > 0 || themeLine.visible
 
       Text {
         visible: projectsView.error !== ""
@@ -456,11 +464,14 @@ FocusScope {
         font.pixelSize: Style.font.bodySmall
       }
       Text {
-        visible: projectsView.lightTheme
+        id: themeLine
+        visible: projectsView.colorsNeedWork
         textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.WordWrap
-        text: "Your theme is light. These colors are made for dark themes, so terminal text may be hard to read."
+        text: projectsView.lightTheme
+          ? "Your theme is light. Colors marked with a dot were picked for a dark theme; pick a light one from the palette."
+          : "Colors marked with a dot are hard to read on this theme; pick another from the palette."
         color: projectsView.dim
         font.family: projectsView.fontFamily
         font.pixelSize: Style.font.bodySmall

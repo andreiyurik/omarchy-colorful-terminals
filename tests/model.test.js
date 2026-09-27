@@ -18,6 +18,9 @@ const helper = fs.readFileSync(path.join(__dirname, "..", "bin", "colorful-termi
 const names = helper.match(/^palette_names=\((.*)\)$/m)[1].split(" ")
 const colors = helper.match(/^palette_colors=\((.*)\)$/m)[1].split(" ").map(s => s.replace(/"/g, ""))
 const palette = names.map((name, i) => ({ name, color: colors[i] }))
+const lightNames = helper.match(/^light_names=\((.*)\)$/m)[1].split(" ")
+const lightColors = helper.match(/^light_colors=\((.*)\)$/m)[1].split(" ").map(s => s.replace(/"/g, ""))
+const lightPalette = lightNames.map((name, i) => ({ name, color: lightColors[i] }))
 
 console.log("model: colors")
 eq("hex normalizes", "#1a3a5a", M.hexOf("1A3A5A"))
@@ -33,18 +36,20 @@ eq("good color passes", "", M.colorIssue("#1a3a5a", "#d8dee9", "#2e3440"))
 // Every palette color must read well on every dark Omarchy theme we can find.
 const themeDir = "/usr/share/omarchy/themes"
 if (fs.existsSync(themeDir)) {
-  let checked = 0
+  let checked = 0, checkedLight = 0
   for (const theme of fs.readdirSync(themeDir)) {
     const file = path.join(themeDir, theme, "colors.toml")
     if (!fs.existsSync(file)) continue
     const toml = fs.readFileSync(file, "utf8")
     const pick = key => (toml.match(new RegExp(`^${key}\\s*=\\s*"(#[0-9a-fA-F]{6})"`, "m")) || [])[1]
     const fg = pick("foreground"), bg = pick("background")
-    if (!fg || !bg || M.isLightTheme(bg)) continue
-    checked++
-    for (const p of palette) eq(`${p.name} on ${theme}`, "", M.colorIssue(p.color, fg, bg))
+    if (!fg || !bg) continue
+    const light = M.isLightTheme(bg)
+    light ? checkedLight++ : checked++
+    for (const p of light ? lightPalette : palette) eq(`${p.name} on ${theme}`, "", M.colorIssue(p.color, fg, bg))
   }
   eq("checked some dark themes", true, checked > 5)
+  eq("checked some light themes", true, checkedLight > 2)
 }
 
 console.log("model: palette")
@@ -54,6 +59,11 @@ let closest = 1
 for (let i = 0; i < palette.length; i++)
   for (let j = i + 1; j < palette.length; j++) closest = Math.min(closest, M.distance(palette[i].color, palette[j].color))
 eq("palette colors are far apart", true, closest > 0.06)
+eq("eight light colors", 8, lightPalette.length)
+closest = 1
+for (let i = 0; i < lightPalette.length; i++)
+  for (let j = i + 1; j < lightPalette.length; j++) closest = Math.min(closest, M.distance(lightPalette[i].color, lightPalette[j].color))
+eq("light colors are far apart too", true, closest > 0.06)
 const projects = [{ n: 1, path: "~/a", color: "#1a3a5a" }]
 eq("free color skips used", "#213f12", M.freeColor(palette, projects, "#d8dee9", "#2e3440"))
 eq("free color skips poor ones", "#213f12", M.freeColor([{ name: "x", color: "#2e3440" }].concat(palette), projects, "#d8dee9", "#2e3440"))
