@@ -17,8 +17,23 @@ jobs:
         with:
           luaVersion: "5.4"
 
-      - name: Install zsh, fish and tmux for the hook tests
-        run: sudo apt-get update && sudo apt-get install -y zsh fish tmux
+      # zsh and fish run in the distribution containers below, each with its
+      # own system shell config; tmux covers bash in tmux here.
+      - name: Install tmux for the hook tests
+        run: sudo apt-get update && sudo apt-get install -y tmux
 
       - name: Run tests
         run: tests/run
+
+  distros:
+    name: shells on ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [arch, ubuntu, debian, fedora]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: bash, zsh, fish and tmux on ${{ matrix.distro }}
+        run: tests/distros/run ${{ matrix.distro }}
