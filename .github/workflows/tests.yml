@@ -3,6 +3,11 @@ name: Tests
 on:
   push:
   pull_request:
+  # Every day, so a change in Omarchy that breaks the panel shows up even
+  # when this repository is quiet.
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,3 +42,24 @@ jobs:
 
       - name: bash, zsh, fish and tmux on ${{ matrix.distro }}
         run: tests/distros/run ${{ matrix.distro }}
+
+  omarchy:
+    name: panel on Omarchy ${{ matrix.omarchy }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        omarchy: [release, main]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Panel tests against Omarchy ${{ matrix.omarchy }}
+        run: tests/omarchy/run ${{ matrix.omarchy }}
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: panel-on-omarchy-${{ matrix.omarchy }}
+          path: tests/omarchy/out/${{ matrix.omarchy }}/
+          if-no-files-found: ignore
