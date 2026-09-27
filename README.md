@@ -30,6 +30,8 @@ Then click the palette icon (󰏘) on the right of the bar.
 
 After that, the bar icon, `Super+Ctrl+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`. Without the icon, `omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'` opens it too.
 
+To update: `omarchy plugin update andreiyurik.colorful-terminals`, then `omarchy restart shell` so the new panel shows. (The shell reloads a plugin's entry file on its own, but keeps parts it has already loaded until it restarts.)
+
 ## Keys
 
 | Keys | What it does |
@@ -131,9 +133,14 @@ tests/render-panel out # screenshots of the panel in each state (at 2x)
 tests/render-preview   # regenerate preview.png
 tests/distros/run      # bash, zsh, fish and tmux on Arch, Ubuntu, Debian and Fedora (docker)
 tests/omarchy/run      # the panel on Omarchy's latest release and its default branch (docker)
+tests/release-vm/run   # before a release: the plugin in a real Omarchy, in QEMU (docker, KVM)
 ```
 
-The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. `tests/distros/run` runs the shell tests in a container per distribution, with each one's own shells and system shell config, as a normal user and without network; CI runs it for all four. `tests/omarchy/run` renders the panel on Omarchy's own shell code, fetched from GitHub: the latest release and the default branch. CI runs it on every push and once a day, so a change in Omarchy that breaks the panel is caught before a release reaches users. The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
+The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. `tests/distros/run` runs the shell tests in a container per distribution, with each one's own shells and system shell config, as a normal user and without network; CI runs it for all four. `tests/omarchy/run` renders the panel on Omarchy's own shell code, fetched from GitHub: the latest release and the default branch. CI runs it on every push and once a day, so a change in Omarchy that breaks the panel is caught before a release reaches users.
+
+Before a release, `tests/release-vm/run` installs the real Omarchy ISO in a QEMU/KVM virtual machine and goes through the plugin the way a user does: `omarchy plugin add`, the bar icon and the panel, Turn on, `Super+Ctrl+Alt+1` pressed on a virtual keyboard, the project terminal and its color in Ghostty, `Super+Ctrl+Alt+0`, `omarchy plugin update`, Turn off (every file back byte for byte), and `omarchy plugin remove`. QEMU runs in a container, so nothing is installed on your machine. The first run downloads the 6 GB ISO and installs Omarchy, up to 40 minutes; the installed system is cached and later runs take minutes. Screenshots land in `tests/release-vm/out/`.
+
+A release is tagged only when all three are green: `tests/run` with CI (every push), `tests/omarchy/run` (every push and daily), and `tests/release-vm/run` (before the tag). The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
 
 ## License
 
