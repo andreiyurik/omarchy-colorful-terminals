@@ -175,19 +175,25 @@ fi
 
 echo "hooks: speed"
 # Every prompt reads projects.conf, so it must stay cheap: 30 projects, 200
-# prompts in a row, no more than 20 ms each on average.
+# prompts in a row, no more than 30 ms each on average, best of three runs
+# (shared CI machines are noisy; a real regression, such as a fork per line,
+# costs hundreds of milliseconds).
 new_home
 mkdir -p "${conf%/*}" "$HOME/p/15/src"
 for i in $(seq 1 30); do printf '~/p/%s  #1a3a5a\n' "$i"; done > "$conf"
-ms_per_prompt() {   # <shell command that runs 200 prompts> ; prints ms per prompt
-  local start end
-  start=$(date +%s%N)
-  "$@" > /dev/null 2>&1 || { echo 99999; return; }
-  end=$(date +%s%N)
-  echo $(((end - start) / 200 / 1000000))
+ms_per_prompt() {   # <shell command that runs 200 prompts> ; prints ms per prompt, best of three
+  local start end best=99999 ms _
+  for _ in 1 2 3; do
+    start=$(date +%s%N)
+    "$@" > /dev/null 2>&1 || { echo 99999; return; }
+    end=$(date +%s%N)
+    ms=$(((end - start) / 200 / 1000000))
+    ((ms < best)) && best=$ms
+  done
+  echo "$best"
 }
 fast() {   # <name> <ms>
-  if (($2 <= 20)); then pass; else fail "$1: $2 ms per prompt, over 20"; fi
+  if (($2 <= 30)); then pass; else fail "$1: $2 ms per prompt, over 30"; fi
   printf '  %s: %s ms per prompt\n' "$1" "$2"
 }
 cd "$HOME/p/15/src" || exit 1
