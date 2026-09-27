@@ -129,9 +129,10 @@ No, and it works alongside one. The color depends only on the current folder.
 tests/run              # every test, in a temporary HOME
 tests/render-panel out # screenshots of the panel in each state (at 2x)
 tests/render-preview   # regenerate preview.png
+tests/distros/run      # bash, zsh, fish and tmux on Arch, Ubuntu, Debian and Fedora (docker)
 ```
 
-The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
+The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. `tests/distros/run` runs the shell tests in a container per distribution, with each one's own shells and system shell config, as a normal user and without network; CI runs it for all four. The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
 
 ## License
 
