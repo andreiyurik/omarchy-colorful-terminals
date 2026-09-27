@@ -1,0 +1,318 @@
+#!/bin/bash
+# The release test inside its container (see tests/release-vm/run): installs
+# Omarchy from /omarchy.iso into /cache/base.qcow2 once, then boots a
+# throwaway copy and runs tests/release-vm/guest over SSH. Keys are pressed on
+# QEMU's virtual keyboard, so Hyprland sees them as a person typing.
+#
+# The unattended install follows omarchy-iso's own integration harness
+# (github.com/omacom/omarchy-iso, test/integration.d/base-test.sh, MIT).
+set -uo pipefail
+shopt -s lastpipe   # "guest step | result" counts in this shell, not a subshell
+
+ssh_port=2322
+memory=8192
+install_timeout=2400
+boot_timeout=600
+user=omarchy
+password=omarchy
+
+base=/cache/base.qcow2
+base_vars=/cache/OVMF_VARS.4m.fd
+key=/cache/id_ed25519
+ovmf_code=/usr/share/edk2/x64/OVMF_CODE.4m.fd
+ovmf_vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
+run=$(mktemp -d)
+qmp_sock=$run/qmp.sock
+pidfile=$run/qemu.pid
+failures=0
+passes=0
+
+mkdir -p /out
+rm -f /out/*.png /out/*.log
+
+log() { printf '\n== %s\n' "$*"; }
+result() {   # reads "ok - ..." / "not ok - ..." lines, counts and echoes them
+  local line
+  while IFS= read -r line; do
+    echo "$line"
+    case $line in
+      "not ok"*) failures=$((failures + 1)) ;;
+      ok*) passes=$((passes + 1)) ;;
+    esac
+  done
+}
+ok() { echo "ok - $1" | result; }
+not_ok() { echo "not ok - $1" | result; }
+
+# ------------------------------------------------------------- the machine
+
+vm_running() { [[ -f $pidfile ]] && kill -0 "$(cat "$pidfile")" 2> /dev/null; }
+
+start_vm() {   # <disk> <vars> [extra qemu args]
+  local disk=$1 vars=$2
+  shift 2
+  qemu-system-x86_64 \
+    -cpu host -enable-kvm -machine q35,accel=kvm -smp 4 -m "$memory" \
+    -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
+    -drive if=pflash,format=raw,file="$vars" \
+    -drive file="$disk",format=qcow2,if=none,id=drive0 \
+    -device virtio-blk-pci,drive=drive0,bootindex=1 \
+    -device virtio-vga -display none \
+    -usb -device usb-tablet \
+    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$ssh_port-:22 \
+    -device virtio-net-pci,netdev=net0 \
+    -qmp "unix:$qmp_sock,server,nowait" \
+    -serial "file:/out/serial.log" \
+    -pidfile "$pidfile" -daemonize "$@" || { echo "QEMU did not start"; return 1; }
+  sleep 2
+  vm_running || { echo "QEMU stopped right after starting"; return 1; }
+}
+
+qmp() {
+  printf '{"execute":"qmp_capabilities"}\n{"execute":%s}\n' "$1" |
+    timeout 5 socat -t 2 - "UNIX-CONNECT:$qmp_sock" 2> /dev/null || true
+}
+
+# Presses a key chord on the virtual keyboard, e.g. press meta_l-ctrl-alt-1.
+press() {
+  local part json=""
+  local -a parts
+  IFS='-' read -ra parts <<< "$1"
+  for part in "${parts[@]}"; do json+="{\"type\":\"qcode\",\"data\":\"$part\"},"; done
+  qmp "\"send-key\", \"arguments\": {\"keys\": [${json%,}]}" > /dev/null
+  sleep 0.1
+}
+
+type_text() {
+  local text=$1 ch i
+  for ((i = 0; i < ${#text}; i++)); do
+    ch=${text:i:1}
+    case $ch in
+      [a-z0-9]) press "$ch" ;;
+      " ") press spc ;;
+      /) press slash ;;
+      .) press dot ;;
+      -) press minus ;;
+      ~) press shift-grave_accent ;;
+    esac
+  done
+}
+
+screen_text() {   # OCR of the whole screen, for the installer's reboot prompt
+  qmp "\"screendump\", \"arguments\": {\"filename\": \"$run/screen.ppm\"}" > /dev/null
+  [[ -s $run/screen.ppm ]] || return 0
+  magick "$run/screen.ppm" -colorspace gray -negate -resize 150% "$run/screen.png" 2> /dev/null &&
+    tesseract "$run/screen.png" - --psm 6 2> /dev/null
+}
+
+ssh_guest() {
+  ssh -i "$key" -p "$ssh_port" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 "$user@127.0.0.1" "$@"
+}
+guest() { ssh_guest bash src/tests/release-vm/guest "$@"; }
+
+stop_vm() {
+  vm_running || return 0
+  ssh_guest "echo $password | sudo -S systemctl poweroff" > /dev/null 2>&1 || qmp '"system_powerdown"' > /dev/null
+  local i
+  for ((i = 0; i < 60; i++)); do vm_running || return 0; sleep 1; done
+  qmp '"quit"' > /dev/null
+  sleep 1
+  vm_running && kill "$(cat "$pidfile")" 2> /dev/null
+  return 0
+}
+cleanup() {
+  stop_vm
+  rm -rf "$run"
+  [[ -z ${OWNER-} ]] || chown -R "$OWNER" /cache /out 2> /dev/null
+}
+trap cleanup EXIT
+
+wait_for_ssh() {   # <seconds>
+  local i
+  for ((i = 0; i < $1; i += 5)); do
+    ssh_guest true 2> /dev/null && return 0
+    vm_running || return 1
+    sleep 5
+  done
+  return 1
+}
+
+# ---------------------------------------------------------- install, once
+
+build_cidata() {
+  local dir=$run/cidata hash
+  local disk_bytes=$((40 * 1024 * 1024 * 1024)) mib=$((1024 * 1024)) gib=$((1024 * 1024 * 1024))
+  local boot_start=$mib boot_size=$((2 * gib))
+  local main_start=$((boot_size + boot_start))
+  local main_size=$((disk_bytes - main_start - mib))
+  mkdir -p "$dir"
+  hash=$(openssl passwd -6 "$password")
+  jq -n --arg hash "$hash" --arg user "$user" \
+    '{root_enc_password: $hash, users: [{enc_password: $hash, groups: [], sudo: true, username: $user}]}' \
+    > "$dir/user_credentials.json"
+  jq -n --argjson boot_start "$boot_start" --argjson boot_size "$boot_size" \
+    --argjson main_start "$main_start" --argjson main_size "$main_size" '
+    def bytes(v): {sector_size: {unit: "B", value: 512}, unit: "B", value: v};
+    {
+      app_config: null, "archinstall-language": "English", auth_config: {},
+      audio_config: {audio: "pipewire"},
+      bootloader_config: {bootloader: "Limine", uki: false, removable: false},
+      custom_commands: [],
+      omarchy_install: {
+        mode: "full_disk", defer_provisioning: false, target_mount: "/mnt",
+        boot: {esp_mount: "/boot", esp_path: "/EFI/limine", efi_binary: "limine_x64.efi", enable_fallback: true},
+        storage: {kernel: "linux-omarchy"}
+      },
+      disk_config: {config_type: "default_layout", device_modifications: [{
+        device: "/dev/vda", wipe: true, partitions: [
+          {btrfs: [], dev_path: null, flags: ["boot", "esp"], fs_type: "fat32", mount_options: [],
+           mountpoint: "/boot", obj_id: "ea21d3f2-82bb-49cc-ab5d-6f81ae94e18d",
+           size: bytes($boot_size), start: bytes($boot_start), status: "create", type: "primary"},
+          {btrfs: [{mountpoint: "/", name: "@"}, {mountpoint: "/home", name: "@home"},
+                   {mountpoint: "/var/log", name: "@log"}, {mountpoint: "/var/cache/pacman/pkg", name: "@pkg"}],
+           dev_path: null, flags: [], fs_type: "btrfs", mount_options: ["compress=zstd"], mountpoint: null,
+           obj_id: "8c2c2b92-1070-455d-b76a-56263bab24aa",
+           size: bytes($main_size), start: bytes($main_start), status: "create", type: "primary"}
+        ]}]},
+      hostname: "omarchy-test", kernels: ["linux-omarchy"], network_config: {type: "iso"}, ntp: true,
+      parallel_downloads: 8, script: null, services: [], swap: true, timezone: "UTC",
+      locale_config: {kb_layout: "us", sys_enc: "UTF-8", sys_lang: "en_US.UTF-8"},
+      mirror_config: {custom_repositories: [], mirror_regions: {}, optional_repositories: [],
+        custom_servers: [{url: "https://mirror.omarchy.org/$repo/os/$arch"},
+                         {url: "https://geo.mirror.pkgbuild.com/$repo/os/$arch"}]},
+      packages: ["base-devel", "git", "omarchy-keyring", "omarchy-settings", "omarchy"],
+      profile_config: {gfx_driver: null, greeter: null, profile: {}},
+      version: "3.0.9"
+    }' > "$dir/user_configuration.json"
+  echo "Release Test" > "$dir/user_full_name.txt"
+  echo "test@example.com" > "$dir/user_email_address.txt"
+  echo "false" > "$dir/user_encrypt_installation.txt"
+  cp "$key.pub" "$dir/authorized_keys"
+  truncate -s 4M "$run/cidata.img"
+  mkfs.vfat -n CIDATA "$run/cidata.img" > /dev/null
+  mcopy -i "$run/cidata.img" "$dir"/* ::/
+}
+
+install_base() {
+  log "Installing Omarchy $OMARCHY_VERSION unattended (up to $((install_timeout / 60)) minutes)"
+  rm -f "$base" "$base.building" "$key" "$key.pub"
+  ssh-keygen -t ed25519 -N "" -q -C colorful-terminals-release-test -f "$key"
+  build_cidata
+  qemu-img create -f qcow2 "$base.building" 40G > /dev/null
+  cp "$ovmf_vars" "$base_vars"
+  start_vm "$base.building" "$base_vars" \
+    -drive file=/omarchy.iso,media=cdrom,if=none,format=raw,id=cdrom0 -device ide-cd,drive=cdrom0,bootindex=2 \
+    -drive file="$run/cidata.img",format=raw,if=none,id=cidata -device usb-storage,drive=cidata || return 1
+  local waited=0 text
+  until ssh_guest true 2> /dev/null; do
+    vm_running || { echo "the VM stopped during the install"; return 1; }
+    text=$(screen_text)
+    grep -qi "Reboot Now" <<< "$text" && press ret
+    if grep -qi "installation stopped" <<< "$text"; then
+      cp "$run/screen.png" /out/install-failed.png 2> /dev/null
+      echo "the installer stopped; see tests/release-vm/out/install-failed.png"
+      return 1
+    fi
+    ((waited < install_timeout)) || { echo "the install took over $install_timeout s"; return 1; }
+    ((waited % 300 == 0)) && echo "  installing... ${waited}s"
+    sleep 10
+    waited=$((waited + 10))
+  done
+  # Log straight into the session on boot. Omarchy does this itself only for
+  # encrypted installs, where the disk password is the login.
+  ssh_guest "echo $password | sudo -S sh -c 'mkdir -p /etc/sddm.conf.d && printf \"[Autologin]\nUser=$user\nSession=omarchy.desktop\n\" > /etc/sddm.conf.d/zz-release-test.conf'" 2> /dev/null ||
+    { echo "could not set up autologin"; return 1; }
+  stop_vm
+  mv "$base.building" "$base"
+  log "Omarchy is installed; the image is kept in the cache for later runs"
+}
+
+if [[ -n ${REINSTALL-} || ! -f $base || ! -f $base_vars || ! -f $key ]]; then
+  install_base || exit 1
+fi
+
+# ---------------------------------------------------------------- the test
+
+log "Booting a throwaway copy of the installed Omarchy"
+qemu-img create -f qcow2 -b "$base" -F qcow2 "$run/run.qcow2" > /dev/null
+cp "$base_vars" "$run/vars.fd"
+start_vm "$run/run.qcow2" "$run/vars.fd" || exit 1
+wait_for_ssh "$boot_timeout" || { echo "the VM did not come up"; exit 1; }
+tar -C /src --exclude=./tests/release-vm/out --exclude=./tests/omarchy/out -cf - . | ssh_guest 'rm -rf src && mkdir src && tar -C src -xf -'
+waited=0
+until guest session-ready 2> /dev/null; do
+  ((waited < 180)) || { echo "Hyprland and the Omarchy shell did not start"; exit 1; }
+  sleep 3
+  waited=$((waited + 3))
+done
+sleep 5
+
+log "Install the plugin the way a user does"
+guest add | result
+guest panel 02-panel-first-run | result
+
+log "Turn it on"
+guest turn-on | result
+
+log "Super+Ctrl+Alt+1 opens the project"
+press meta_l-ctrl-alt-1
+for ((i = 0; i < 40; i++)); do [[ $(guest project-windows) == 1 ]] && break; sleep 0.5; done
+if [[ $(guest project-windows) == 1 ]]; then ok "Super+Ctrl+Alt+1 opens a terminal in the project"; else not_ok "Super+Ctrl+Alt+1 opens a terminal in the project"; fi
+sleep 3
+guest shot 03-project-terminal
+press meta_l-ctrl-alt-1
+sleep 2
+if [[ $(guest project-windows) == 1 ]]; then ok "pressing it again finds that window instead of a second one"; else not_ok "pressing it again finds that window instead of a second one"; fi
+
+# The project color is #1a3a5a. A terminal may be a little see-through, so
+# the pixel only has to be nearer the project color than the theme's.
+nearer() {   # <r g b> <target r g b> <other r g b>: is the pixel nearer target?
+  local -a p t o
+  read -ra p <<< "$1"
+  read -ra t <<< "$2"
+  read -ra o <<< "$3"
+  local to_target=$(((p[0] - t[0]) ** 2 + (p[1] - t[1]) ** 2 + (p[2] - t[2]) ** 2))
+  local to_other=$(((p[0] - o[0]) ** 2 + (p[1] - o[1]) ** 2 + (p[2] - o[2]) ** 2))
+  ((to_target < to_other))
+}
+project="26 58 90"
+theme=$(guest theme-background)
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$project" "$theme"; then ok "the terminal has the project color ($pixel)"; else not_ok "the terminal has the project color (got $pixel, theme $theme)"; fi
+type_text "cd /"
+press ret
+sleep 2
+guest shot 04-left-the-project
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$theme" "$project"; then ok "leaving the folder brings the theme color back ($pixel)"; else not_ok "leaving the folder brings the theme color back (got $pixel)"; fi
+guest close-project
+
+log "Super+Ctrl+Alt+0 opens the panel"
+press meta_l-ctrl-alt-0
+sleep 3
+guest shot 05-panel-by-key
+press esc
+sleep 1
+
+log "Update to a new version"
+guest update | result
+guest panel 06-panel-after-update | result
+guest restart-shell | result
+guest panel 07-panel-after-restart | result
+
+guest shell-log
+log "Turn it off and remove it"
+guest turn-off | result
+guest remove | result
+
+# Screenshots from the guest, then the checks that read them.
+ssh_guest 'tar -C shots -cf - .' | tar -C /out -xf - 2> /dev/null
+ocr() { magick "/out/$1.png" -colorspace gray -resize 150% "$run/ocr.png" 2> /dev/null && tesseract "$run/ocr.png" - --psm 3 2> /dev/null; }
+if ocr 05-panel-by-key | grep -qi "Colorful Terminals"; then ok "the panel is on screen after Super+Ctrl+Alt+0"; else not_ok "the panel is on screen after Super+Ctrl+Alt+0"; fi
+if ocr 06-panel-after-update | grep -qi "Colorful Terminals"; then ok "the panel still opens right after an update"; else not_ok "the panel still opens right after an update"; fi
+if ocr 07-panel-after-restart | grep -qi "Terminals Updated"; then ok "after omarchy restart shell the new version shows"; else not_ok "after omarchy restart shell the new version shows"; fi
+
+log "Result"
+echo "$passes passed, $failures failed. Screenshots: tests/release-vm/out/"
+((failures == 0))

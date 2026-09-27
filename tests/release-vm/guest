@@ -1,0 +1,152 @@
+#!/bin/bash
+# shellcheck disable=SC2016 # bash -c snippets are single-quoted on purpose
+# The release test's steps inside the Omarchy virtual machine, run over SSH by
+# tests/release-vm/inside from a copy of this repository at ~/src:
+#   bash ~/src/tests/release-vm/guest <step>
+# Each check prints "ok - ..." or "not ok - ...".
+set -uo pipefail
+
+id=andreiyurik.colorful-terminals
+plugin_dir=$HOME/.config/omarchy/plugins/$id
+helper=$plugin_dir/bin/colorful-terminals
+shots=$HOME/shots
+mkdir -p "$shots"
+
+# The graphical session's environment, reached from an SSH shell.
+XDG_RUNTIME_DIR=/run/user/$(id -u)
+export XDG_RUNTIME_DIR
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+HYPRLAND_INSTANCE_SIGNATURE=$(find "$XDG_RUNTIME_DIR/hypr" -mindepth 1 -maxdepth 1 -printf '%T@ %f\n' 2> /dev/null | sort -rn | head -n 1 | cut -d' ' -f2)
+WAYLAND_DISPLAY=$(find "$XDG_RUNTIME_DIR" -maxdepth 1 -name 'wayland-*' ! -name '*.lock' -printf '%f\n' 2> /dev/null | head -n 1)
+export HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY
+export OMARCHY_PATH=/usr/share/omarchy
+export PATH=$OMARCHY_PATH/bin:$PATH
+
+check() {   # <description> <command...>
+  local description=$1
+  shift
+  if "$@" > /dev/null 2>&1; then echo "ok - $description"; else echo "not ok - $description"; fi
+}
+
+# Waits up to <seconds> for <command...> to succeed.
+wait_for() {
+  local seconds=$1 i
+  shift
+  for ((i = 0; i < seconds * 2; i++)); do "$@" > /dev/null 2>&1 && return 0; sleep 0.5; done
+  return 1
+}
+
+shot() { grim "$shots/$1.png"; }
+
+binds() { hyprctl binds 2> /dev/null; }
+has_bind() { binds | grep -qF "$1"; }
+project_key_bound() { binds | awk '/^bind/{m=k=""} /modmask: 76/{m=1} /key: SUPER \+ CTRL \+ ALT \+ code:10/{k=1} /description: Project 1: demo/{if(m&&k)f=1} END{exit !f}'; }
+no_project_keys() { ! binds | grep -q 'description: Project [1-9]'; }
+in_bar() { jq -e --arg id "$id" '[.bar.layout[][]?.id] | index($id)' "$HOME/.config/omarchy/shell.json"; }
+not_in_bar() { ! in_bar; }
+rc_files=("$HOME/.bashrc" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc")
+
+case ${1-} in
+  session-ready)
+    hyprctl version > /dev/null 2>&1 && [[ $(omarchy-shell shell ping 2> /dev/null) == ok ]]
+    ;;
+
+  add)
+    echo "# Omarchy $(pacman -Q omarchy 2> /dev/null | cut -d' ' -f2), $(hyprctl version | head -n 1 | cut -d' ' -f1-2)"
+    mkdir -p "$HOME/before"
+    for f in "${rc_files[@]}"; do [[ -e $f ]] && cp -p "$f" "$HOME/before/${f##*/}"; done
+    check "omarchy plugin add installs it from git" omarchy plugin add "$HOME/src" --enable --yes
+    check "the plugin is in ~/.config/omarchy/plugins" test -f "$plugin_dir/manifest.json"
+    check "its icon is in the bar" wait_for 10 in_bar
+    check "the shell still answers" wait_for 10 bash -c '[[ $(omarchy-shell shell ping) == ok ]]'
+    sleep 2
+    shot 01-bar
+    ;;
+
+  panel)   # <name>: opens the panel from the command line and takes a screenshot
+    check "the panel opens" bash -c "[[ \$(omarchy-shell shell summon $id '{}') == ok ]]"
+    sleep 2
+    shot "$2"
+    omarchy-shell shell hide "$id" > /dev/null 2>&1
+    sleep 1
+    ;;
+
+  turn-on)
+    mkdir -p "$HOME/work/demo"
+    check "a project is added" "$helper" add "$HOME/work/demo" '#1a3a5a'
+    check "turning it on" "$helper" integration install --yes
+    for f in "${rc_files[@]}"; do check "a block in ${f/#$HOME/\~}" grep -q 'BEGIN colorful-terminals' "$f"; done
+    check "Hyprland has Super+Ctrl+Alt+1 for the project" wait_for 20 project_key_bound
+    check "Super+Ctrl+Alt+0 opens the panel" has_bind 'description: Colorful Terminals settings'
+    check "Omarchy's own Super+Alt+1 is untouched" has_bind 'description: Switch to group window 1'
+    check "no key of Omarchy's is shared" bash -c "[[ \$('$helper' scan | jq '.conflicts | length') == 0 ]]"
+    check "Hyprland reports no config errors" bash -c '[[ -z $(hyprctl configerrors | grep -v "^$" | grep -vi "no errors") ]]'
+    ;;
+
+  project-windows)   # prints how many windows the project has
+    hyprctl clients -j | jq '[.[] | select(.class | startswith("org.omarchy.project_demo"))] | length'
+    ;;
+
+  window-pixel)   # prints "r g b" of a spot inside the project terminal, off its text
+    read -r x y w h < <(hyprctl clients -j |
+      jq -r '[.[] | select(.class | startswith("org.omarchy.project_demo"))][0] | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+    grim -g "$((x + w - 30)),$((y + h - 30)) 1x1" -t ppm - | tail -c 3 | od -An -tu1 | xargs
+    ;;
+
+  theme-background)   # prints "r g b" of the theme's terminal background
+    hex=$(grep -m1 -E '^background\s*=' "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml" | grep -oE '#[0-9a-fA-F]{6}')
+    printf '%d %d %d\n' "0x${hex:1:2}" "0x${hex:3:2}" "0x${hex:5:2}"
+    ;;
+
+  close-project)
+    hyprctl clients -j | jq -r '.[] | select(.class | startswith("org.omarchy.project_demo")) | .pid' | xargs -r kill
+    wait_for 10 bash -c '[[ $(hyprctl clients -j | jq "[.[] | select(.class | startswith(\"org.omarchy.project_demo\"))] | length") == 0 ]]'
+    ;;
+
+  shell-log)   # the Omarchy shell's log since boot, for the plugin
+    journalctl --user -b --no-pager 2> /dev/null | grep -iE "colorful|andreiyurik|plugin" > "$shots/shell.log"
+    ;;
+
+  shot)
+    shot "$2"
+    ;;
+
+  update)   # commits a visible change and updates the plugin like a user would
+    sed -i 's/title: "Colorful Terminals"/title: "Colorful Terminals Updated"/' "$HOME/src/ProjectsView.qml"
+    git -C "$HOME/src" -c user.name=test -c user.email=test@example.com commit -qam "A visible change"
+    check "omarchy plugin update takes the new version" omarchy plugin update "$id" --yes
+    check "the new code is on disk" grep -q 'Colorful Terminals Updated' "$plugin_dir/ProjectsView.qml"
+    sleep 3
+    ;;
+
+  restart-shell)   # what the README says to do after an update
+    omarchy restart shell > /dev/null 2>&1
+    sleep 3
+    check "the shell comes back" wait_for 60 bash -c '[[ $(omarchy-shell shell ping) == ok ]]'
+    sleep 5
+    ;;
+
+  turn-off)
+    check "turning it off" "$helper" integration uninstall --yes
+    for f in "${rc_files[@]}"; do
+      if [[ -e $HOME/before/${f##*/} ]]; then
+        check "${f/#$HOME/\~} is back byte for byte" cmp -s "$f" "$HOME/before/${f##*/}"
+      else
+        check "${f/#$HOME/\~} is gone again" test ! -e "$f"
+      fi
+    done
+    check "the project keys are gone from Hyprland" wait_for 20 no_project_keys
+    ;;
+
+  remove)
+    check "omarchy plugin remove" omarchy plugin remove "$id" --yes
+    check "the plugin folder is gone" test ! -e "$plugin_dir"
+    check "its icon left the bar" wait_for 10 not_in_bar
+    check "the shell still answers" bash -c '[[ $(omarchy-shell shell ping) == ok ]]'
+    ;;
+
+  *)
+    echo "usage: guest session-ready|add|panel <name>|turn-on|project-windows|window-pixel|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
+    exit 2
+    ;;
+esac
