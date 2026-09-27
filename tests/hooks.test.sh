@@ -73,10 +73,13 @@ rm "$conf"
 # ---------------------------------------------------------------- terminals
 
 # Runs <shell command> in a pseudo-terminal, feeding it <input>, and prints the
-# OSC 11/111 codes it drew, in order.
+# OSC 11/111 codes it drew, in order. The input waits for the first prompt.
+# zsh runs with -d, without the distribution's /etc/zsh/zshrc: on Ubuntu its
+# compinit can stop to ask about "insecure directories" and eat the input.
+type_into() { sleep 1; printf '%s\nexit\n' "$1"; }
 osc_codes() {
   local command=$1 input=$2
-  printf '%s\nexit\n' "$input" | TERM=xterm-256color script -q -e -c "$command" /dev/null 2>&1 |
+  type_into "$input" | TERM=xterm-256color script -q -e -c "$command" /dev/null 2>&1 |
     grep -aoE $'\x1b\\]11;#[0-9a-fA-F]{6}\x07|\x1b\\]111\x07' | sed $'s/\x1b\\]//; s/\x07//' | paste -sd ' '
 }
 
@@ -108,10 +111,10 @@ else
     project_home
     : > "$HOME/.zshrc"
     "$helper" integration install --yes > /dev/null
-    eq "zsh: colors follow cd" "$expected" "$(osc_codes "env ZDOTDIR=$HOME $zsh -i" "$walk")"
+    eq "zsh: colors follow cd" "$expected" "$(osc_codes "env ZDOTDIR=$HOME $zsh -d -i" "$walk")"
     eq "zsh: sourcing twice keeps one hook" "1" \
-      "$(printf 'source ~/.zshrc\nsource ~/.zshrc\nprint hooks=${#${(M)precmd_functions:#_ct_precmd}}\nexit\n' |
-        TERM=xterm-256color script -q -e -c "env ZDOTDIR=$HOME $zsh -i" /dev/null 2>&1 | grep -ao 'hooks=[0-9]*' | tail -n 1 | cut -d= -f2)"
+      "$(type_into $'source ~/.zshrc\nsource ~/.zshrc\nprint hooks=${#${(M)precmd_functions:#_ct_precmd}}' |
+        TERM=xterm-256color script -q -e -c "env ZDOTDIR=$HOME $zsh -d -i" /dev/null 2>&1 | grep -ao 'hooks=[0-9]*' | tail -n 1 | cut -d= -f2)"
   else
     echo "  SKIP: zsh"
   fi
@@ -120,7 +123,7 @@ else
     mkdir -p "$HOME/.config/fish"
     "$helper" integration install --yes > /dev/null
     eq "fish: colors follow cd" "$expected" "$(osc_codes "env XDG_CONFIG_HOME=$HOME/.config $fish -i" "$walk")"
-    out=$(printf 'cd ~/code/shop\nfalse\necho "status=$status"\nexit\n' |
+    out=$(type_into $'cd ~/code/shop\nfalse\necho "status=$status"' |
       TERM=xterm-256color script -q -e -c "env XDG_CONFIG_HOME=$HOME/.config $fish -i" /dev/null 2>&1)
     ok "fish: keeps \$status" grep -aq 'status=1' <<< "$out"
   else
@@ -142,10 +145,12 @@ else
     return 1
   }
   check_tmux() {   # <name> <shell command>
-    local name=$1 command=$2 pane
+    local name=$1 command=$2 pane i
     t kill-server 2> /dev/null
     pane=$(t new-session -d -P -F '#{pane_id}' -x 80 -y 24 "$command")
-    sleep 0.5
+    # Type only once the shell has drawn its first prompt.
+    for ((i = 0; i < 50; i++)); do [[ -n $(t capture-pane -p -t "$pane" 2> /dev/null | tr -d '[:space:]') ]] && break; sleep 0.1; done
+    sleep 0.3
     t send-keys -t "$pane" 'cd ~/code/shop/src' Enter
     if wait_for "$pane" "bg=#1a3a5a"; then pass; else fail "$name: pane takes the project color" "got: $(pane_bg "$pane")"; fi
     eq "$name: active style too" "bg=#1a3a5a" "$(t show -p -v -t "$pane" window-active-style 2> /dev/null)"
@@ -159,7 +164,7 @@ else
   if [[ -n $zsh ]]; then
     : > "$HOME/.zshrc"
     "$helper" integration install --yes > /dev/null
-    check_tmux "zsh in tmux" "env ZDOTDIR=$HOME $zsh -i"
+    check_tmux "zsh in tmux" "env ZDOTDIR=$HOME $zsh -d -i"
   fi
   if [[ -n $fish ]]; then
     mkdir -p "$HOME/.config/fish"
