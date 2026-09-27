@@ -27,7 +27,6 @@
     "overlay",
     "bar-widget"
   ],
-  "keepLoaded": true,
   "entryPoints": {
     "overlay": "Panel.qml",
     "barWidget": "BarWidget.qml"
