@@ -148,11 +148,11 @@ Item {
   }
 
   // Picks up hand edits of projects.conf while the panel is open.
-  Timer {
-    interval: 1500
-    repeat: true
-    running: root.opened
-    onTriggered: root.refresh()
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/colorful-terminals/projects.conf"
+    watchChanges: root.opened
+    printErrors: false
+    onFileChanged: { reload(); root.refresh() }
   }
 
   Loader {

@@ -123,8 +123,9 @@ state=$("$helper" state)
 eq "state is JSON with 3 projects" "3" "$(jq '.projects | length' <<< "$state")"
 eq "missing folder flagged" "false" "$(jq '.projects[2].exists' <<< "$state")"
 eq "bad line reported" "~/c green" "$(jq -r '.problems[0].text' <<< "$state")"
-eq "palette has 10 colors" "10" "$(jq '.palette | length' <<< "$state")"
+eq "palette has 8 colors" "8" "$(jq '.palette | length' <<< "$state")"
 eq "integration not installed" "false" "$(jq '.integration.installed' <<< "$state")"
+eq "explicit key setting reported" "true" "$(jq '.replaceGroupKeysSet' <<< "$state")"
 mkdir -p "$HOME/Projects/site/.git" "$HOME/repo/.git" "$HOME/.hidden/x/.git"
 scan=$("$helper" scan)
 eq "repos found, hidden skipped" '["~/Projects/site","~/repo"]' "$(jq -c '.repos | sort' <<< "$scan")"

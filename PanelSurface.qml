@@ -31,13 +31,20 @@ PanelWindow {
 
   BorderSurface {
     id: card
-    width: Math.min(Style.space(680), panel.width - Style.gapsOut * 4)
+    width: Math.min(Style.space(560), panel.width - Style.gapsOut * 4)
     height: Math.min(view.implicitHeight + contentTopInset + contentBottomInset, panel.height - Style.gapsOut * 4)
     anchors.centerIn: parent
     radius: Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
     padding: Style.spacing.panelPadding
+    opacity: 0
+    scale: 0.98
+
+    // Settles in instead of popping up.
+    Component.onCompleted: { opacity = 1; scale = 1 }
+    Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
     MouseArea { anchors.fill: parent; onClicked: {} }
 
@@ -47,6 +54,7 @@ PanelWindow {
       y: card.contentTopInset
       width: card.width - card.contentLeftInset - card.contentRightInset
       maxListHeight: panel.height * 0.5
+      dialogHost: dialogLayer
 
       loaded: !!(panel.controller && panel.controller.config)
       config: (panel.controller && panel.controller.config)
@@ -71,5 +79,11 @@ PanelWindow {
       function onCommandFinished(args, ok, out, err) { view.finished(args, ok, out, err) }
       function onChangeSettled() { view.settled() }
     }
+  }
+
+  // Above the card, so the Turn off dialog dims the whole screen.
+  Item {
+    id: dialogLayer
+    anchors.fill: parent
   }
 }

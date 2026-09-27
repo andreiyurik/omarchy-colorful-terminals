@@ -11,10 +11,10 @@ work=$(mktemp -d)
 trap '[[ -n ${KEEP-} ]] || rm -rf "$work"' EXIT
 ln -s "$shell_dir/Commons" "$work/Commons"
 ln -s "$shell_dir/Ui" "$work/Ui"
-cp -r Panel.qml PanelSurface.qml ProjectsView.qml ProjectRow.qml Notice.qml Model.js bin lib "$work/"
+cp -r Panel.qml PanelSurface.qml ProjectsView.qml ProjectRow.qml Swatch.qml AddProject.qml TurnOn.qml Model.js bin lib "$work/"
 cp tests/panel/shell.qml "$work/shell.qml"
 home="$work/home"
-mkdir -p "$home/first" "$home/second" "$home/.config/colorful-terminals" "$home/.local/state"
+mkdir -p "$home/first" "$home/second" "$home/third" "$home/.config/colorful-terminals" "$home/.local/state"
 ln -s "$HOME/.local/state/omarchy" "$home/.local/state/omarchy" 2> /dev/null || true
 printf '~/first  #1a3a5a\n' > "$home/.config/colorful-terminals/projects.conf"
 HOME="$home" CT_TEST_DIR="$home" QT_QPA_PLATFORM=offscreen HYPRLAND_INSTANCE_SIGNATURE="" \

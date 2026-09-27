@@ -12,7 +12,7 @@ An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal bac
 
 - **Automatic.** `cd` into a project and the background turns its color. Leave it and the theme color comes back. Subfolders keep the project color; a project inside another project keeps its own.
 - **Project keys.** `Super+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
-- **One small panel.** Add folders, pick colors, and reorder, all from the keyboard. Every change is saved as you make it.
+- **One small panel.** Add folders, pick colors, and reorder, with the keyboard or the mouse. Every change is saved as you make it.
 
 It keys off the folder, not the way the terminal was opened, so it works with any project launcher (Project Launcher, Tableau, a tmux sessionizer, or plain `cd`).
 
@@ -22,17 +22,13 @@ It keys off the folder, not the way the terminal was opened, so it works with an
 omarchy plugin add https://github.com/andreiyurik/omarchy-colorful-terminals --enable
 ```
 
-Then open the panel once:
+Then click the palette icon (󰏘) on the right of the bar.
 
-```bash
-omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'
-```
+1. Pick a folder: **Enter** adds the one you are in, or type to search your git repositories.
+2. Choose **Turn on**. The panel lists the three files it adds a block to, and **Show exact lines** shows every line first (see [What it changes](#what-it-changes)). Nothing changes before this.
+3. Press **Enter** to open your first project in a new terminal, in its color.
 
-1. Press **Enter** to add the folder you are in, or pick one of your git repositories.
-2. Press **I** to turn it on. The panel first shows the exact lines it will add (see [What it changes](#what-it-changes)).
-3. Open a new terminal in that folder. Its background has the project color.
-
-After that, the palette icon in the bar, `Super+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`.
+After that, the bar icon, `Super+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`. Without the icon, `omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'` opens it too.
 
 ## Keys
 
@@ -45,18 +41,17 @@ In the panel:
 
 | Keys | What it does |
 |---|---|
-| `↑` `↓` | Select a project |
-| `←` `→` | Change its color |
+| `↑` `↓` | Move between projects |
+| `←` `→` | Change the project's color |
+| `C` or `#` | Type a custom color, like `#1a3a5a`, with a live preview |
 | `Shift+↑` `Shift+↓` | Move it up or down; this changes its key number |
-| `#` | Type a custom color, like `#1a3a5a` |
-| `Enter` | Open the selected project |
-| `Del` | Remove it (`Ctrl+Z` puts it back) |
+| `Enter` | Open the project |
+| `Del` | Remove it (**Undo** or `Ctrl+Z` puts it back) |
 | `A` | Add a project (`Tab` completes a path) |
-| `G` | Let project keys replace other `Super+Alt+digit` keys (shown only on a clash) |
-| `Ctrl+U` | Uninstall the integration (press twice) |
+| `Ctrl+U` | Turn off, after asking |
 | `Esc` | Close |
 
-The hints are always shown at the bottom of the panel.
+The bottom of the panel shows the few keys that matter for what is selected, and the buttons show theirs on hover. Everything also works with the mouse. Letter keys go by position, so they work on any keyboard layout, and the folder field understands a path typed on a Russian layout (`Ё.` is `~/`).
 
 ## The settings file
 
@@ -76,7 +71,7 @@ The first project line opens with `Super+Alt+1`, the second with `Super+Alt+2`, 
 
 ## What it changes
 
-The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to three files, and only after you press **I** in the panel:
+The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to three files, and only after you choose **Turn on** in the panel:
 
 | File | What the block does |
 |---|---|
@@ -86,11 +81,11 @@ The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-
 
 Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink.
 
-`Super+Alt+1…5` are also Omarchy's "switch to group window" keys. The panel lists every key that clashes and never replaces one unless you tick the box. Nothing needs sudo, nothing goes over the network, and nothing is collected.
+`Super+Alt+1…5` are also Omarchy's "switch to group window" keys. When you turn it on, a switch lets projects have them (the default; `Super+Alt+Tab` still switches group tabs) or leaves Omarchy's keys in place. The choice is saved as `replace-group-keys` and can be changed in the panel at any time. Nothing needs sudo, nothing goes over the network, and nothing is collected.
 
 ## Remove
 
-1. In the panel, press `Ctrl+U` twice. This removes the three blocks and gives each file back exactly as it was (any edits you made since are kept). The same thing from a terminal:
+1. In the panel, choose **Turn off…** (or press `Ctrl+U`) and confirm. This removes the three blocks and gives each file back exactly as it was (any edits you made since are kept). The same thing from a terminal:
 
    ```bash
    ~/.config/omarchy/plugins/andreiyurik.colorful-terminals/bin/colorful-terminals integration uninstall
@@ -108,7 +103,7 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 
 - **The color changes at the next prompt.** It switches when a command finishes and bash draws its prompt, not in the middle of a running script.
 - **bash only**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Not zsh or fish, and not inside tmux or zellij yet.
-- **Made for dark themes.** On a light theme the panel warns you, and marks any color that would make text hard to read.
+- **Made for dark themes.** On a light theme the panel says so, and marks any color that would make text hard to read.
 - A program that paints its own background, such as a full-screen editor theme, covers the color while it runs.
 - Folder names containing ` # ` (space, hash, space) or line breaks are not supported.
 
@@ -130,7 +125,7 @@ No, and it works alongside one. The color depends only on the current folder.
 
 ```bash
 tests/run              # every test, in a temporary HOME
-tests/render-panel out # screenshots of the panel in each state
+tests/render-panel out # screenshots of the panel in each state (at 2x)
 tests/render-preview   # regenerate preview.png
 ```
 

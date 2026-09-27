@@ -7,7 +7,7 @@ import "Model.js" as Model
 // shows `config`/`scan` from the helper and asks for changes through `run`.
 // Every change is saved immediately; there is no Save button.
 FocusScope {
-  id: root
+  id: projectsView
 
   // From the helper (`colorful-terminals state` and `scan`).
   property var config: ({ projects: [], palette: [], problems: [], integration: { installed: true }, replaceGroupKeys: false })
@@ -15,6 +15,8 @@ FocusScope {
   property var dirs: []
   property string preview: ""
   property bool loaded: false
+  // Where the Turn off dialog draws its scrim; the whole window when hosted.
+  property Item dialogHost: null
 
   property string fontFamily: Style.font.menuFamily
   property color text: Color.menu.text
@@ -31,13 +33,16 @@ FocusScope {
 
   // UI state.
   property string mode: "list"          // list | add | hex
-  property int selected: 0              // project index; projects.length = "Add project" row
+  property int selected: 0              // index into `targets`
   property int addSelected: 0
   property string query: ""
-  property string message: ""
-  property bool messageIsError: false
+  property string hexPreview: ""
+  property string error: ""             // the last failure, until the next change
+  property string note: ""              // a quiet line, e.g. after turning on
+  property string flashText: ""         // "Saved" in the header, for a moment
   property var undo: null               // last removed project, for Ctrl+Z
-  property bool confirmUninstall: false
+  property bool showLines: false
+  property bool setupReplace: true
   property int selectAfterRefresh: -1
   // True from a change until the fresh state is back, so a fast second key
   // press cannot act on an old list (and move the wrong project).
@@ -48,16 +53,41 @@ FocusScope {
   readonly property bool empty: loaded && projects.length === 0
   readonly property bool installed: !!(config && config.integration && config.integration.installed)
   readonly property bool adding: mode === "add" || empty
-  readonly property var current: selected < projects.length ? projects[selected] : null
-  readonly property var rows: Model.suggestions(query, scan.currentDir, scan.repos, dirs, projects)
+  readonly property bool needsSetup: loaded && !installed && projects.length > 0
   readonly property var conflicts: Model.conflictsFor(scan.conflicts, projects.length)
+  readonly property bool showKeys: installed && (conflicts.length > 0 || !!config.replaceGroupKeys)
   readonly property bool lightTheme: Model.isLightTheme(String(themeBackground))
+  readonly property var rows: Model.suggestions(query, scan.currentDir, scan.repos, dirs, projects)
+
+  // Everything the keyboard cursor can land on, top to bottom.
+  readonly property var targets: {
+    var t = []
+    for (var i = 0; i < projects.length; i++) t.push("project")
+    t.push("add")
+    if (showKeys) t.push("keys")
+    if (needsSetup && conflicts.length) t.push("setupKeys")
+    if (needsSetup) t.push("install")
+    return t
+  }
+  readonly property string target: targets[selected] || ""
+  readonly property var current: target === "project" ? projects[selected] : null
+
+  readonly property string keysLabel: "Super+Alt+"
+    + (conflicts.length ? Model.digitRange(conflicts.map(function(c) { return c.digit })) : "1–9")
+    + " open projects"
+  function keysDescription(on) {
+    var own = conflicts.filter(function(c) { return !c.byCode })
+    var text = on ? "Omarchy's group-tab keys step aside. Super+Alt+Tab still switches tabs."
+                  : "Omarchy also uses them to switch group tabs."
+    if (own.length) text += " Your own binding on Super+Alt+" + own[0].digit + " stays; change it in ~/.config/hypr/bindings.lua."
+    return text
+  }
 
   readonly property color dim: Util.alpha(text, 0.62)
-  readonly property color faint: Util.alpha(text, 0.16)
-  readonly property int gap: Style.spacing.rowGap
-  readonly property int pad: Style.spacing.rowPaddingX
-  readonly property int rowHeight: Style.space(46)
+  readonly property alias turnOffDialog: turnOff
+
+  function rowTint(i) { return i < rowModel.count ? rowModel.get(i).tint : "" }
+  function setQuery(value) { addView.setText(value) }
 
   implicitHeight: layout.implicitHeight
 
@@ -65,6 +95,8 @@ FocusScope {
 
   function request(args) {
     busy = true
+    error = ""
+    note = ""
     run(args)
   }
 
@@ -73,65 +105,115 @@ FocusScope {
     busy = false
   }
 
-  function say(textValue, isError) {
-    message = Model.plain(textValue, 160)
-    messageIsError = !!isError
+  function flash(textValue) {
+    flashText = Model.plain(textValue, 60)
+    flashTimer.restart()
   }
 
   // Called by the controller when a helper command finishes.
   function finished(args, ok, out, err) {
     if (!ok) {
-      say(String(err || out || "Something went wrong").split("\n")[0].replace(/^colorful-terminals: /, ""), true)
+      error = Model.plain(String(err || out || "Something went wrong").split("\n")[0].replace(/^colorful-terminals: /, ""), 160)
       return
     }
-    var first = String(out || "").split("\n")[0]
-    if (args[0] === "integration" && args[1] === "install") first = "Done. Open a new terminal to see project colors."
-    if (args[0] === "integration" && args[1] === "uninstall") first = "Integration removed. New terminals use the theme color."
-    if (first) say(first, false)
+    if (args[0] === "integration" && args[1] === "install") {
+      flash("On")
+      selectAfterRefresh = 0
+      note = projects.length
+        ? "Colorful Terminals is on. Press Enter to open " + Model.plain(projects[0].name, 40) + " in its color."
+        : "Colorful Terminals is on."
+    } else if (args[0] === "integration" && args[1] === "uninstall") {
+      note = "Turned off. New terminals use the theme color; your projects are kept."
+    } else if (args[0] === "remove") {
+      flash("Removed")
+    } else if (args[0] === "add") {
+      flash("Added")
+    } else {
+      flash("Saved")
+    }
   }
 
+  // A config change handler runs before the bindings that read `config`
+  // (projects, targets) have caught up, so rows are built from `config` itself
+  // and the cursor is placed once everything has settled.
   function configUpdated() {
-    if (selectAfterRefresh >= 0) {
-      selected = Math.min(selectAfterRefresh, projects.length)
-      selectAfterRefresh = -1
-    }
-    selected = Math.max(0, Math.min(selected, projects.length))
-    if (empty && !folderField.activeFocus) Qt.callLater(function() { folderField.forceActiveFocus() })
+    syncRows((config && config.projects) || [])
+    Qt.callLater(placeCursor)
   }
   onConfigChanged: configUpdated()
+
+  function placeCursor() {
+    if (selectAfterRefresh >= 0) {
+      selected = selectAfterRefresh
+      selectAfterRefresh = -1
+    }
+    selected = Math.max(0, Math.min(selected, targets.length - 1))
+    if (empty && addView.visible) addView.focusField()
+  }
+
+  // The list keeps its rows and updates them in place, so a new color fades
+  // in instead of the whole list being rebuilt.
+  ListModel { id: rowModel }
+  function syncRows(list) {
+    var fields = ["n", "name", "path", "tint", "exists"]
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i]
+      var next = { n: p.n, name: p.name, path: p.path, tint: Model.hexOf(p.color), exists: p.exists !== false }
+      if (i >= rowModel.count) { rowModel.append(next); continue }
+      for (var f = 0; f < fields.length; f++) {
+        if (rowModel.get(i)[fields[f]] !== next[fields[f]]) rowModel.setProperty(i, fields[f], next[fields[f]])
+      }
+    }
+    while (rowModel.count > list.length) rowModel.remove(rowModel.count - 1)
+  }
 
   function reset() {
     mode = "list"
     query = ""
     addSelected = 0
-    message = ""
-    confirmUninstall = false
-    if (empty) folderField.forceActiveFocus()
+    error = ""
+    note = ""
+    hexPreview = ""
+    showLines = false
+    setupReplace = config && config.replaceGroupKeysSet ? !!config.replaceGroupKeys : true
+    selected = needsSetup ? targets.length - 1 : 0
+    turnOff.opened = false
+    if (empty) addView.focusField()
     else keyCatcher.forceActiveFocus()
+  }
+
+  function pointAt(kind) {
+    var i = targets.indexOf(kind)
+    if (i >= 0 && mode === "list") selected = i
+  }
+
+  function pointRow(index, item, mouse) {
+    if (mode === "list" && pointerGate.moved(item, mouse)) selected = index
   }
 
   function setColor(n, color) {
     var c = Model.hexOf(color)
-    if (!c) { say("Colors look like #1a3a5a", true); return }
+    if (!c) { error = "Colors look like #1a3a5a"; return }
+    if (n - 1 < rowModel.count) rowModel.setProperty(n - 1, "tint", c)
     request(["color", String(n), c])
   }
 
   function stepColor(step) {
-    if (!current) return
-    setColor(current.n, Model.stepColor(palette, current.color, step))
+    if (!current || !current.exists) return
+    setColor(current.n, Model.stepColor(palette, rowModel.get(selected).tint, step))
   }
 
   function move(step) {
     if (!current) return
-    var target = selected + step
-    if (target < 0 || target >= projects.length) return
+    var to = selected + step
+    if (to < 0 || to >= projects.length) return
     request(["move", String(current.n), step < 0 ? "up" : "down"])
-    selected = target
+    selected = to
   }
 
   function removeSelected() {
     if (!current) return
-    undo = { n: current.n, path: current.path, color: current.color }
+    undo = { n: current.n, path: current.path, color: current.color, name: current.name }
     request(["remove", String(current.n)])
   }
 
@@ -146,13 +228,14 @@ FocusScope {
     mode = "add"
     query = ""
     addSelected = 0
-    Qt.callLater(function() { folderField.forceActiveFocus() })
+    addView.setText("")
+    Qt.callLater(function() { addView.focusField() })
   }
 
   function addFolder(path) {
     if (!path) return
     var taken = Model.projectNumber(projects, path)
-    if (taken) { say(path + " is already project " + taken, true); return }
+    if (taken) { error = path + " is already project " + taken; return }
     request(["add", path, Model.freeColor(palette, projects, String(themeText), String(themeBackground))])
     selectAfterRefresh = projects.length
     mode = "list"
@@ -162,88 +245,125 @@ FocusScope {
 
   function addHighlighted() {
     var row = rows[addSelected]
+    var q = Model.folderQuery(query)
     if (row) addFolder(row.path)
-    else if (Model.isPathQuery(query)) addFolder(query)
+    else if (Model.isPathQuery(q)) addFolder(q)
   }
 
   function completeHighlighted() {
     var row = rows[addSelected]
     if (!row) return
-    query = row.path === "~" ? "~/" : row.path + "/"
-    folderField.text = query
-    folderField.cursorPosition = query.length
+    addView.setText(row.path === "~" ? "~/" : row.path + "/")
   }
 
   function startHex() {
-    if (current) mode = "hex"
+    if (!current || !current.exists) return
+    hexPreview = Model.hexOf(current.color)
+    mode = "hex"
   }
 
   function applyHex(value) {
     var c = Model.hexOf(value)
-    if (!c) { say("Type a color like #1a3a5a", true); return }
+    if (!c) { error = "Type a color like #1a3a5a"; return }
     setColor(current.n, c)
     mode = "list"
+    hexPreview = ""
     keyCatcher.forceActiveFocus()
   }
 
   function cancelMode() {
     mode = "list"
     query = ""
+    hexPreview = ""
     keyCatcher.forceActiveFocus()
   }
 
-  function install() { request(["integration", "install", "--yes"]) }
+  function install() {
+    var args = ["integration", "install", "--yes"]
+    if (conflicts.length) args.push("--replace-group-keys", setupReplace ? "yes" : "no")
+    request(args)
+  }
 
-  function uninstall() {
-    if (!confirmUninstall) {
-      confirmUninstall = true
-      say("Press Ctrl+U again to remove the plugin's lines from ~/.bashrc, hyprland.lua and the menu.", false)
-      return
-    }
-    confirmUninstall = false
-    request(["integration", "uninstall", "--yes"])
+  function askTurnOff() {
+    if (!installed) return
+    turnOff.selectedIndex = 0
+    turnOff.opened = true
   }
 
   function toggleReplace() {
     request(["set", "replace-group-keys", config.replaceGroupKeys ? "no" : "yes"])
   }
 
+  function activate() {
+    if (target === "project") { if (current.exists) openProject(current.n) }
+    else if (target === "add") startAdd()
+    else if (target === "keys") toggleReplace()
+    else if (target === "setupKeys") setupReplace = !setupReplace
+    else if (target === "install") install()
+  }
+
   // Letter keys by position too, so they work on any keyboard layout
-  // (xkb keycodes: A 38, G 42, H 43, I 31, U 30, Z 52).
-  readonly property var scanCodes: ({ A: 38, G: 42, H: 43, I: 31, U: 30, Z: 52 })
+  // (xkb keycodes: A 38, C 54, U 30, Z 52).
+  readonly property var scanCodes: ({ A: 38, C: 54, U: 30, Z: 52 })
   function letter(event, name) {
     return event.key === Qt["Key_" + name] || event.nativeScanCode === scanCodes[name]
   }
 
   function handleListKey(event) {
+    if (turnOff.opened) return turnOff.handleKey(event)
     var shift = event.modifiers & Qt.ShiftModifier
     var ctrl = event.modifiers & Qt.ControlModifier
     var changes = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Delete
       || event.key === Qt.Key_Backspace || ((event.key === Qt.Key_Up || event.key === Qt.Key_Down) && shift)
     if (busy && changes) return true
-    if (!letter(event, "U")) confirmUninstall = false
+    pointerGate.reset()
 
     if (event.key === Qt.Key_Escape) closeRequested()
     else if (event.key === Qt.Key_Up && shift) move(-1)
     else if (event.key === Qt.Key_Down && shift) move(1)
     else if (event.key === Qt.Key_Up) selected = Math.max(0, selected - 1)
-    else if (event.key === Qt.Key_Down) selected = Math.min(projects.length, selected + 1)
+    else if (event.key === Qt.Key_Down) selected = Math.min(targets.length - 1, selected + 1)
     else if (event.key === Qt.Key_Left) stepColor(-1)
     else if (event.key === Qt.Key_Right) stepColor(1)
     else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) removeSelected()
     else if (letter(event, "Z") && ctrl) undoRemove()
-    else if (letter(event, "U") && ctrl && installed) uninstall()
-    else if (letter(event, "I") && !ctrl && !installed && projects.length) install()
-    else if (letter(event, "G") && !ctrl && conflicts.length) toggleReplace()
+    else if (letter(event, "U") && ctrl) askTurnOff()
     else if ((letter(event, "A") && !ctrl) || event.key === Qt.Key_Plus || event.key === Qt.Key_Insert) startAdd()
-    else if (event.text === "#" || (letter(event, "H") && !ctrl)) startHex()
-    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-      if (current) openProject(current.n)
-      else startAdd()
-    } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9 && !ctrl) {
-      selected = Math.min(projects.length, event.key - Qt.Key_1)
+    else if (event.text === "#" || (letter(event, "C") && !ctrl)) startHex()
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) activate()
+    else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9 && !ctrl) {
+      selected = Math.min(projects.length - 1, event.key - Qt.Key_1)
     } else return false
     return true
+  }
+
+  Timer {
+    id: flashTimer
+    interval: 1800
+    onTriggered: projectsView.flashText = ""
+  }
+
+  PointerMoveGate {
+    id: pointerGate
+    referenceItem: projectsView
+  }
+
+  ConfirmDialog {
+    id: turnOff
+    parent: projectsView.dialogHost || view
+    anchors.fill: parent
+    z: 100
+    message: "Turn off Colorful Terminals? This takes its blocks out of ~/.bashrc, hyprland.lua and the Omarchy menu. Your projects are kept."
+    confirmText: "Turn off"
+    fontFamily: projectsView.fontFamily
+    background: Color.menu.background
+    foreground: projectsView.text
+    onCanceled: { opened = false; keyCatcher.forceActiveFocus() }
+    onConfirmed: {
+      opened = false
+      projectsView.request(["integration", "uninstall", "--yes"])
+      keyCatcher.forceActiveFocus()
+    }
   }
 
   // --------------------------------------------------------------- layout
@@ -252,106 +372,109 @@ FocusScope {
     id: keyCatcher
     focus: true
     Keys.onPressed: function(event) {
-      if (root.mode === "list" && !root.empty) event.accepted = root.handleListKey(event)
+      if (projectsView.mode === "list" && !projectsView.empty) event.accepted = projectsView.handleListKey(event)
     }
   }
 
   Column {
     id: layout
     width: parent.width
-    spacing: root.gap
+    spacing: Style.space(12)
 
-    // Header
+    PanelHero {
+      id: hero
+      width: parent.width
+      title: "Colorful Terminals"
+      meta: Model.summary(projectsView.projects.length)
+      foreground: projectsView.text
+      fontFamily: projectsView.fontFamily
+      iconComponent: Component {
+        Text {
+          textFormat: Text.PlainText
+          text: "󰏘"
+          color: projectsView.accent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.display
+        }
+      }
+      trailingControl: Component {
+        Text {
+          textFormat: Text.PlainText
+          text: "✓ " + (projectsView.flashText || "Saved")
+          color: projectsView.dim
+          font.family: projectsView.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+          opacity: projectsView.flashText !== "" ? 1 : 0
+          Behavior on opacity { NumberAnimation { duration: projectsView.flashText !== "" ? 120 : 400; easing.type: Easing.OutCubic } }
+        }
+      }
+    }
+
+    // Quiet status lines: an error, a note, a hand-edit problem, a light theme.
     Column {
       width: parent.width
-      spacing: Style.spacing.xs
+      spacing: Style.spacing.sm
+      visible: projectsView.error !== "" || projectsView.note !== "" || problemsText.problems.length > 0 || projectsView.lightTheme
+
       Text {
-        textFormat: Text.PlainText
-        text: "Colorful Terminals"
-        color: root.text
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.heading
-        font.bold: true
-      }
-      Text {
+        visible: projectsView.error !== ""
         textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.WordWrap
-        text: root.empty
-          ? "Give each project its own terminal color. Pick a folder to start."
-          : "Terminals in a project folder get its color. Super+Alt+N opens project N."
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
+        text: projectsView.error
+        color: projectsView.urgent
+        font.family: projectsView.fontFamily
+        font.pixelSize: Style.font.bodySmall
       }
-    }
-
-    // Light theme warning
-    Notice {
-      view: root
-      visible: root.lightTheme
-      tone: root.urgent
-      title: "Your theme is light"
-      body: "These colors are made for dark themes. Text may be hard to read until you switch to a dark theme."
-    }
-
-    // One-time setup: shows exactly what will be added before anything changes.
-    Notice {
-      view: root
-      visible: root.loaded && !root.installed && root.projects.length > 0
-      tone: root.accent
-      title: "Last step: turn it on"
-      body: "This adds a marked block to three files. A backup is made first, and Ctrl+U removes it later."
-      detail: root.preview
-      action: "Install  (I)"
-      onActivated: root.install()
-    }
-
-    // Other Super+Alt+digit keys
-    Notice {
-      view: root
-      visible: root.conflicts.length > 0 || (root.config.replaceGroupKeys && root.installed)
-      tone: root.urgent
-      title: root.conflicts.length
-        ? "Super+Alt+" + Model.digitRange(root.conflicts.map(function(c) { return c.digit })) + " also do something else"
-        : "Project keys replace Omarchy's Super+Alt+digit keys"
-      body: {
-        var lines = []
-        for (var i = 0; i < root.conflicts.length && i < 4; i++) {
-          var c = root.conflicts[i]
-          lines.push("Super+Alt+" + c.digit + ": " + Model.plain(c.description, 60)
-            + (c.byCode ? "" : "  (set in your own config; change it in ~/.config/hypr/bindings.lua)"))
+      Text {
+        visible: projectsView.note !== ""
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        text: projectsView.note
+        color: projectsView.text
+        font.family: projectsView.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+      Text {
+        id: problemsText
+        readonly property var problems: projectsView.config.problems || []
+        visible: problems.length > 0
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        text: {
+          if (!problems.length) return ""
+          var first = problems[0]
+          return "Skipped " + problems.length + (problems.length === 1 ? " line" : " lines") + " in "
+            + Model.plain(projectsView.config.file || "projects.conf", 80) + ". Line " + first.line + ": “"
+            + Model.plain(first.text, 50) + "”. A project line is a folder and a color, like ~/code/shop #1a3a5a."
         }
-        if (root.conflicts.length > 4) lines.push("…and " + (root.conflicts.length - 4) + " more")
-        return lines.join("\n")
+        color: projectsView.urgent
+        font.family: projectsView.fontFamily
+        font.pixelSize: Style.font.bodySmall
       }
-      checkLabel: "Let project keys replace them  (G)"
-      checked: !!root.config.replaceGroupKeys
-      showCheck: true
-      onToggled: root.toggleReplace()
+      Text {
+        visible: projectsView.lightTheme
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        text: "Your theme is light. These colors are made for dark themes, so terminal text may be hard to read."
+        color: projectsView.dim
+        font.family: projectsView.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
     }
 
-    // Lines the helper could not read
-    Notice {
-      view: root
-      visible: (root.config.problems || []).length > 0
-      tone: root.urgent
-      title: "Some lines in " + (root.config.file || "projects.conf") + " were skipped"
-      body: {
-        var p = root.config.problems || []
-        var lines = []
-        for (var i = 0; i < p.length && i < 3; i++) lines.push("Line " + p[i].line + ": " + Model.plain(p[i].text, 70))
-        lines.push("A project line is a folder and a color, like  ~/code/shop  #1a3a5a")
-        return lines.join("\n")
-      }
-    }
+    PanelSeparator { foreground: projectsView.text }
 
     // Project list
     Flickable {
       id: listFlick
-      visible: !root.empty
+      visible: !projectsView.adding
       width: parent.width
-      height: Math.min(listColumn.implicitHeight, root.maxListHeight)
+      height: Math.min(listColumn.implicitHeight, projectsView.maxListHeight)
       contentHeight: listColumn.implicitHeight
       clip: true
       boundsBehavior: Flickable.StopAtBounds
@@ -363,245 +486,172 @@ FocusScope {
         spacing: Style.spacing.xs
 
         Repeater {
-          model: root.projects
+          model: rowModel
           delegate: ProjectRow {
-            required property var modelData
-            required property int index
             width: listColumn.width
-            view: root
-            project: modelData
-            isSelected: root.selected === index && root.mode !== "add"
-            onClicked: { root.selected = index; root.cancelMode() }
-            onYChanged: if (isSelected) root.ensureVisible(y, height)
-            onHeightChanged: if (isSelected) root.ensureVisible(y, height)
-            onIsSelectedChanged: if (isSelected) root.ensureVisible(y, height)
+            view: projectsView
+            hasCursor: projectsView.selected === index && projectsView.target === "project"
+            onPointed: function(item, mouse) { projectsView.pointRow(index, item, mouse) }
+            onPicked: { if (projectsView.mode === "hex") projectsView.cancelMode(); projectsView.selected = index }
+            onYChanged: if (hasCursor) projectsView.ensureVisible(y, height)
+            onHeightChanged: if (hasCursor) projectsView.ensureVisible(y, height)
+            onHasCursorChanged: if (hasCursor) projectsView.ensureVisible(y, height)
           }
         }
 
-        // "Add project" row
-        Rectangle {
+        // Add project
+        CursorSurface {
+          id: addRow
           width: listColumn.width
-          height: root.rowHeight * 0.8
-          radius: Style.cornerRadius
-          visible: root.mode !== "add"
-          color: root.selected === root.projects.length ? Color.menu.selectedBackground : "transparent"
-          border.color: root.faint
-          border.width: 1
-          Text {
-            textFormat: Text.PlainText
-            anchors.verticalCenter: parent.verticalCenter
-            x: root.pad
-            text: "+  Add project"
-            color: root.selected === root.projects.length ? Color.menu.selectedText : root.text
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-          }
-          Text {
-            textFormat: Text.PlainText
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right: parent.right
-            anchors.rightMargin: root.pad
-            text: "A"
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.startAdd()
-          }
-        }
-      }
-    }
+          height: Style.space(32) + Style.spacing.rowPaddingX
+          hasCursor: projectsView.target === "add"
+          foreground: projectsView.text
+          accent: projectsView.accent
+          onHasCursorChanged: if (hasCursor) projectsView.ensureVisible(y, height)
 
-    // Add project: a folder field with suggestions
-    Column {
-      visible: root.adding
-      width: parent.width
-      spacing: Style.spacing.sm
-
-      Text {
-        visible: root.empty
-        textFormat: Text.PlainText
-        text: "No projects yet"
-        color: root.text
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.title
-        font.bold: true
-      }
-
-      TextField {
-        id: folderField
-        width: parent.width
-        placeholderText: "Type a folder, like ~/code/shop, or pick one below"
-        font.family: root.fontFamily
-        onTextChanged: {
-          root.query = text
-          root.addSelected = 0
-          if (Model.isPathQuery(text)) root.queryDirs(text)
-        }
-        Keys.onPressed: function(event) {
-          if (event.key === Qt.Key_Escape) {
-            if (text) text = ""
-            else if (root.empty) root.closeRequested()
-            else root.cancelMode()
-          } else if (event.key === Qt.Key_Down) {
-            root.addSelected = Math.min(root.rows.length - 1, root.addSelected + 1)
-          } else if (event.key === Qt.Key_Up) {
-            root.addSelected = Math.max(0, root.addSelected - 1)
-          } else if (event.key === Qt.Key_Tab) {
-            root.completeHighlighted()
-          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.addHighlighted()
-          } else return
-          event.accepted = true
-        }
-      }
-
-      Flickable {
-        id: suggestFlick
-        width: parent.width
-        height: Math.min(suggestColumn.implicitHeight, root.rowHeight * 0.72 * 7)
-        contentHeight: suggestColumn.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        interactive: contentHeight > height
-
-        Column {
-          id: suggestColumn
-          width: parent.width
-
-          Repeater {
-            model: root.rows
-            delegate: Rectangle {
-              id: suggestion
-              required property var modelData
-              required property int index
-              readonly property bool hot: root.addSelected === index
-              readonly property bool primary: modelData.label === "Add current folder"
-              width: suggestColumn.width
-              height: root.rowHeight * (primary ? 0.9 : 0.72)
-              radius: Style.cornerRadius
-              // "Add current folder" is drawn as the panel's main button.
-              color: primary ? (hot ? root.accent : Util.alpha(root.accent, 0.25))
-                             : (hot ? Color.menu.selectedBackground : "transparent")
-              onHotChanged: if (hot) {
-                if (y < suggestFlick.contentY) suggestFlick.contentY = y
-                else if (y + height > suggestFlick.contentY + suggestFlick.height) suggestFlick.contentY = y + height - suggestFlick.height
-              }
-
-              Text {
-                id: suggestLabel
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                x: root.pad
-                width: parent.width * 0.62
-                elide: Text.ElideMiddle
-                text: Model.plain(suggestion.modelData.label, 120)
-                color: suggestion.primary && suggestion.hot ? root.themeBackground
-                  : (suggestion.hot ? Color.menu.selectedText : root.text)
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: suggestion.primary
-              }
-              Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: root.pad
-                width: parent.width * 0.34
-                horizontalAlignment: Text.AlignRight
-                elide: Text.ElideMiddle
-                text: suggestion.modelData.taken
-                  ? "already project " + suggestion.modelData.taken
-                  : (suggestion.primary ? Model.plain(suggestion.modelData.detail, 80) : suggestion.modelData.detail)
-                color: suggestion.primary && suggestion.hot ? root.themeBackground : root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-              }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onEntered: root.addSelected = suggestion.index
-                onClicked: root.addFolder(suggestion.modelData.path)
-              }
-            }
-          }
-        }
-      }
-
-      Text {
-        visible: root.rows.length === 0
-        textFormat: Text.PlainText
-        width: parent.width
-        wrapMode: Text.WordWrap
-        text: root.query
-          ? "No matching repositories. Type a path that starts with ~/ or /"
-          : "Type a folder path that starts with ~/ or /"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-      }
-    }
-
-    // Status message
-    Text {
-      visible: root.message !== ""
-      textFormat: Text.PlainText
-      width: parent.width
-      wrapMode: Text.WordWrap
-      text: root.message
-      color: root.messageIsError ? root.urgent : root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-    }
-
-    Rectangle { width: parent.width; height: 1; color: root.faint }
-
-    // Key hints for the current mode
-    Flow {
-      width: parent.width
-      spacing: Style.spacing.lg
-      Repeater {
-        model: {
-          if (root.mode === "hex") return [["Enter", "apply"], ["Esc", "cancel"]]
-          if (root.adding) return [["↑↓", "choose"], ["Tab", "complete"], ["Enter", "add"], ["Esc", root.empty ? "close" : "back"]]
-          var hints = [["↑↓", "select"], ["←→", "color"], ["Shift+↑↓", "reorder"], ["#", "custom color"],
-                       ["Enter", "open"], ["Del", "remove"], ["A", "add"]]
-          if (root.undo) hints.push(["Ctrl+Z", "undo"])
-          if (root.installed) hints.push(["Ctrl+U", "uninstall integration"])
-          hints.push(["Esc", "close"])
-          return hints
-        }
-        delegate: Row {
-          required property var modelData
-          spacing: Style.spacing.sm
           Rectangle {
-            width: keyText.implicitWidth + Style.spacing.md * 2
-            height: keyText.implicitHeight + Style.spacing.xs * 2
+            id: plusTile
+            x: Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            width: Style.space(32)
+            height: width
             radius: Style.cornerRadius
-            color: root.faint
+            color: "transparent"
+            border.color: Util.alpha(projectsView.text, addRow.hasCursor ? 0.5 : 0.25)
+            border.width: 1
             Text {
-              id: keyText
               textFormat: Text.PlainText
               anchors.centerIn: parent
-              text: modelData[0]
-              color: root.text
-              font.family: root.fontFamily
+              text: "+"
+              color: addRow.hasCursor ? projectsView.accent : projectsView.dim
+              font.family: projectsView.fontFamily
+              font.pixelSize: Style.font.heading
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            anchors.left: plusTile.right
+            anchors.leftMargin: Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Add project"
+            color: addRow.hasCursor ? projectsView.text : projectsView.dim
+            font.family: projectsView.fontFamily
+            font.pixelSize: Style.font.body
+            font.bold: true
+          }
+          MouseArea {
+            id: addMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onPositionChanged: function(mouse) { projectsView.pointRow(projectsView.targets.indexOf("add"), addMouse, mouse) }
+            onClicked: projectsView.startAdd()
+          }
+        }
+      }
+    }
+
+    AddProject {
+      id: addView
+      visible: projectsView.adding
+      width: parent.width
+      view: projectsView
+    }
+
+    // Super+Alt+digit keys, only when Omarchy uses them too
+    Column {
+      visible: projectsView.showKeys && !projectsView.adding
+      width: parent.width
+      spacing: Style.space(12)
+
+      PanelSeparator { foreground: projectsView.text }
+
+      Toggle {
+        width: parent.width
+        label: projectsView.keysLabel
+        description: projectsView.keysDescription(!!projectsView.config.replaceGroupKeys)
+        checked: !!projectsView.config.replaceGroupKeys
+        hasCursor: projectsView.target === "keys"
+        foreground: projectsView.text
+        accent: projectsView.accent
+        fontFamily: projectsView.fontFamily
+        onClicked: projectsView.toggleReplace()
+        onHovered: function(on) { if (on) projectsView.pointAt("keys") }
+      }
+    }
+
+    // One-time setup
+    Column {
+      visible: projectsView.needsSetup && !projectsView.adding
+      width: parent.width
+      spacing: Style.space(12)
+
+      PanelSeparator { foreground: projectsView.text }
+      TurnOn {
+        width: parent.width
+        view: projectsView
+      }
+    }
+
+    PanelSeparator { foreground: projectsView.text }
+
+    // Footer: the few keys that matter here, and a quiet way out.
+    Item {
+      width: parent.width
+      height: Math.max(hintRow.implicitHeight, footerButton.implicitHeight)
+
+      Row {
+        id: hintRow
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(12)
+        Repeater {
+          model: Model.hints({
+            mode: projectsView.adding ? "add" : projectsView.mode, empty: projectsView.empty, target: projectsView.target,
+            missing: !!(projectsView.current && !projectsView.current.exists)
+          })
+          delegate: Row {
+            required property var modelData
+            spacing: Style.spacing.sm
+            Rectangle {
+              anchors.verticalCenter: parent.verticalCenter
+              width: keyText.implicitWidth + Style.spacing.md * 2
+              height: keyText.implicitHeight + Style.spacing.xxs * 2
+              radius: Style.cornerRadius
+              color: Util.alpha(projectsView.text, 0.08)
+              Text {
+                id: keyText
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: modelData[0]
+                color: projectsView.text
+                font.family: projectsView.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData[1]
+              color: projectsView.dim
+              font.family: projectsView.fontFamily
               font.pixelSize: Style.font.caption
             }
           }
-          Text {
-            textFormat: Text.PlainText
-            anchors.verticalCenter: parent.verticalCenter
-            text: modelData[1]
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
         }
+      }
+
+      Button {
+        id: footerButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        visible: !projectsView.adding && (projectsView.undo !== null || projectsView.installed)
+        text: projectsView.undo ? "Undo remove" : "Turn off…"
+        tooltipText: projectsView.undo ? "Ctrl+Z" : "Ctrl+U"
+        foreground: projectsView.undo ? projectsView.text : projectsView.dim
+        fontFamily: projectsView.fontFamily
+        fontSize: Style.font.caption
+        verticalPadding: Style.spacing.xxs
+        onClicked: projectsView.undo ? projectsView.undoRemove() : projectsView.askTurnOff()
       }
     }
   }
@@ -610,5 +660,4 @@ FocusScope {
     if (y < listFlick.contentY) listFlick.contentY = y
     else if (y + h > listFlick.contentY + listFlick.height) listFlick.contentY = y + h - listFlick.height
   }
-
 }

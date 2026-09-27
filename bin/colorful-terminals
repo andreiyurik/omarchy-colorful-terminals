@@ -18,10 +18,10 @@ config_dir=${_ct_file%/*}
 backup_dir="$config_dir/backup"
 max_keys=9
 
-# Ten hues around the color wheel at the same low brightness: far enough apart
+# Eight hues around the color wheel at the same low brightness: far enough apart
 # to tell at a glance, dark enough for light text on every dark Omarchy theme.
-palette_names=(Blue Green Red Violet Olive Teal Plum Brown Indigo Jade)
-palette_colors=("#1a3a5a" "#213f12" "#681e1e" "#4c2276" "#3b3a11" "#133e42" "#621d4b" "#4c3316" "#262e82" "#13402a")
+palette_names=(Blue Green Red Violet Plum Brown Indigo Jade)
+palette_colors=("#1a3a5a" "#213f12" "#681e1e" "#4c2276" "#621d4b" "#4c3316" "#262e82" "#13402a")
 
 usage() {
   cat <<EOF
@@ -41,7 +41,7 @@ Projects (stored in ${_ct_file/#"$HOME"/\~}):
 Integration (bash hook, Hyprland keys, Omarchy menu entry):
   integration status       Show what is installed
   integration preview      Show exactly what install would add
-  integration install [--yes]
+  integration install [--yes] [--replace-group-keys yes|no]
   integration uninstall [--yes]
 EOF
 }
@@ -350,7 +350,7 @@ cmd_open() {
 
 cmd_state() {
   read_config
-  local fields=() problems=() i line
+  local fields=() problems=() i line replace_set=false
   for i in "${!project_lines[@]}"; do
     parse_project $((i + 1))
     fields+=("$_ct_path_text" "$_ct_path" "$_ct_color" "$([[ -d $_ct_path ]] && echo 1 || echo 0)")
@@ -363,6 +363,7 @@ cmd_state() {
     if [[ $_ct_kind == setting && $_ct_key != replace-group-keys ]]; then
       problems+=("$((i + 1))" "${line:0:200}")
     fi
+    [[ $_ct_kind == setting && $_ct_key == replace-group-keys ]] && replace_set=true
   done
   local palette=() status
   for i in "${!palette_colors[@]}"; do palette+=("${palette_names[i]}" "${palette_colors[i]}"); done
@@ -370,6 +371,7 @@ cmd_state() {
   jq -n -c \
     --arg file "$(display_path "$_ct_file")" \
     --arg replace "$_ct_replace_group_keys" \
+    --argjson replaceSet "$replace_set" \
     --argjson integration "$status" \
     --argjson projects "$(json_groups 4 "${fields[@]}")" \
     --argjson problems "$(json_groups 2 "${problems[@]}")" \
@@ -377,6 +379,7 @@ cmd_state() {
     '{
       file: $file,
       replaceGroupKeys: ($replace == "yes"),
+      replaceGroupKeysSet: $replaceSet,
       integration: $integration,
       projects: [$projects | to_entries[] | {
         n: (.key + 1), path: .value[0], abs: .value[1], color: (.value[2] | ascii_downcase),
@@ -586,13 +589,29 @@ where_text() {
 }
 
 cmd_integration() {
-  local action=${1-status} yes=0
+  local action=${1-status} yes=0 replace=""
   shift || true
-  [[ ${1-} == --yes || ${1-} == -y ]] && yes=1
+  while (($#)); do
+    case $1 in
+      --yes | -y) yes=1 ;;
+      --replace-group-keys)
+        replace=${2-}
+        [[ $replace == yes || $replace == no ]] || die "--replace-group-keys is yes or no"
+        shift
+        ;;
+      *) die "unknown option '$1'" ;;
+    esac
+    shift
+  done
   case $action in
     status) integration_status ;;
     preview) integration_preview ;;
-    install) confirm "$yes" "Add these blocks?" integration_preview && integration_install ;;
+    install)
+      confirm "$yes" "Add these blocks?" integration_preview
+      # Saved first, so the keys block reads the choice when Hyprland loads it.
+      [[ -z $replace ]] || cmd_set replace-group-keys "$replace" > /dev/null
+      integration_install
+      ;;
     uninstall) confirm "$yes" "Remove the Colorful Terminals blocks?" true && integration_uninstall ;;
     *) die "integration status|preview|install|uninstall" ;;
   esac

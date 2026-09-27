@@ -98,6 +98,32 @@ function keyLabel(n) {
   return n >= 1 && n <= MAX_KEYS ? "Super+Alt+" + n : "No key"
 }
 
+// "4 projects · Super+Alt+1–4" for the panel header.
+function summary(count) {
+  if (!count) return "A color for every project"
+  var keys = Math.min(count, MAX_KEYS)
+  return count + (count === 1 ? " project" : " projects") + " · Super+Alt+" + (keys === 1 ? "1" : "1–" + keys)
+}
+
+// The few key hints worth showing for what is on screen. ctx: {mode, target,
+// missing}. Everything else lives in tooltips and buttons (Undo, Turn off).
+function hints(ctx) {
+  var c = ctx || {}
+  if (c.mode === "hex") return [["Enter", "apply"], ["Esc", "cancel"]]
+  if (c.mode === "add") return [["↑↓", "choose"], ["Tab", "complete"], ["Enter", "add"], ["Esc", c.empty ? "close" : "back"]]
+  var out = []
+  if (c.target === "project") {
+    if (c.missing) out.push(["Del", "remove"])
+    else out.push(["←→", "color"], ["Enter", "open"])
+  } else if (c.target === "keys") {
+    out.push(["Space", "switch"])
+  } else if (c.target === "install") {
+    out.push(["Enter", "turn on"])
+  }
+  out.push(["A", "add"])
+  return out
+}
+
 // Text safe to hand to components we do not control: no markup characters,
 // control characters, or bidi overrides, and not too long.
 function plain(text, max) {
@@ -117,31 +143,77 @@ function projectNumber(projects, path) {
   return 0
 }
 
-// Rows for the "Add project" list. Each row: {path, label, detail, taken}.
+// Folder name and the folder it sits in: "~/code/shop" -> "shop", "~/code".
+function nameOf(path) {
+  var p = String(path || "").replace(/\/+$/, "")
+  if (p === "" || p === "~") return p || "/"
+  var i = p.lastIndexOf("/")
+  return i >= 0 ? p.substr(i + 1) : p
+}
+
+function parentOf(path) {
+  var p = String(path || "").replace(/\/+$/, "")
+  var i = p.lastIndexOf("/")
+  if (i < 0) return ""
+  return i === 0 ? "/" : p.substr(0, i)
+}
+
+// Text typed on a Russian layout, read as the Latin keys under the same
+// fingers: "Ё." is "~/" and "ырщз" is "shop". Other text is returned as is.
+var RU = "йцукенгшщзхъфывапролджэячсмитьбюё"
+var US = "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"
+var RU_SHIFTED = { "Ё": "~", ".": "/", ",": "?", "\"": "@", "№": "#", ";": "$", ":": "^", "?": "&" }
+function latinKeys(text) {
+  var s = String(text || "")
+  if (!/[а-яё]/i.test(s)) return s
+  var out = ""
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i)
+    var lower = c.toLowerCase()
+    var at = RU.indexOf(lower)
+    if (RU_SHIFTED[c] !== undefined) out += RU_SHIFTED[c]
+    else if (at >= 0) out += lower === c ? US.charAt(at) : US.charAt(at).toUpperCase()
+    else out += c
+  }
+  return out
+}
+
+// What the folder field means: a path as typed, a path typed on the Russian
+// layout ("Ё.co" -> "~/co"), or search text.
+function folderQuery(text) {
+  var t = String(text || "").trim()
+  if (isPathQuery(t)) return t
+  var latin = latinKeys(t)
+  return isPathQuery(latin) ? latin : t
+}
+
+// Rows for the "Add project" list. Each row: {path, name, parent, note, taken}.
 //   empty query  current folder, then git repositories
 //   ~/ or /…     the typed folder, then its subfolders (from the helper)
-//   other text   repositories whose path contains the text
+//   other text   repositories whose path contains the text (either layout)
 function suggestions(query, currentDir, repos, dirs, projects) {
   var rows = []
   var seen = {}
-  function add(path, label, detail) {
+  function add(path, note, typed) {
     if (!path || seen[path]) return
     seen[path] = true
-    rows.push({ path: path, label: label, detail: detail, taken: projectNumber(projects, path) })
+    rows.push({ path: path, name: typed ? path : nameOf(path), parent: typed ? "" : parentOf(path),
+                note: note || "", taken: projectNumber(projects, path) })
   }
-  var q = String(query || "").trim()
+  var q = folderQuery(query)
   var i
   if (!q) {
-    if (currentDir) add(currentDir, "Add current folder", currentDir)
-    for (i = 0; i < (repos || []).length; i++) add(repos[i], repos[i], "git repository")
+    if (currentDir) add(currentDir, "current folder")
+    for (i = 0; i < (repos || []).length; i++) add(repos[i])
   } else if (isPathQuery(q)) {
-    var typed = q.length > 1 ? q.replace(/\/+$/, "") : q
-    add(typed, typed, "this folder")
-    for (i = 0; i < (dirs || []).length; i++) add(dirs[i], dirs[i], "")
+    add(q.length > 1 ? q.replace(/\/+$/, "") : q, "this folder", true)
+    for (i = 0; i < (dirs || []).length; i++) add(dirs[i])
   } else {
     var needle = q.toLowerCase()
+    var latin = latinKeys(q).toLowerCase()
     for (i = 0; i < (repos || []).length; i++) {
-      if (repos[i].toLowerCase().indexOf(needle) >= 0) add(repos[i], repos[i], "git repository")
+      var r = repos[i].toLowerCase()
+      if (r.indexOf(needle) >= 0 || r.indexOf(latin) >= 0) add(repos[i], repos[i] === currentDir ? "current folder" : "")
     }
   }
   return rows
@@ -165,6 +237,6 @@ function digitRange(digits) {
   for (var i = 0; i < d.length; i++) if (unique.indexOf(d[i]) < 0) unique.push(d[i])
   if (!unique.length) return ""
   var contiguous = unique[unique.length - 1] - unique[0] === unique.length - 1
-  if (unique.length > 2 && contiguous) return unique[0] + "–" + unique[unique.length - 1]
+  if (unique.length > 1 && contiguous) return unique[0] + "–" + unique[unique.length - 1]
   return unique.join(", ")
 }

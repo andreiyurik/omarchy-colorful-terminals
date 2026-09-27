@@ -51,6 +51,12 @@ ShellRoot {
         panel.change(["color", "1", "#0A0B0C"])
         break
       case 6:
+        // A hand edit that replaces the file, the way editors save.
+        panel.call(["add", dir + "/third"], function(ok) {})
+        break
+      case 7:
+        var viaWatch = JSON.parse(panel.lastStateJson).projects.length === 3
+        test.check("hand edits show up without polling", viaWatch)
         panel.toggle()
         test.check("toggle closes", !panel.opened)
         Qt.quit()
