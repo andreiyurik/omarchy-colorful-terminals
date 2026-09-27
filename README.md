@@ -6,12 +6,12 @@
 
 Give every project its own terminal color, so you always know which project a terminal belongs to.
 
-An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, and `Super+Alt+1…9` hotkeys that open a project or jump to its window.
+An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, and `Super+Ctrl+Alt+1…9` hotkeys that open a project or jump to its window.
 
 ![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
 
 - **Automatic.** `cd` into a project and the background turns its color. Leave it and the theme color comes back. Subfolders keep the project color; a project inside another project keeps its own.
-- **Project keys.** `Super+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
+- **Project keys.** `Super+Ctrl+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
 - **One small panel.** Add folders, pick colors, and reorder, with the keyboard or the mouse. Every change is saved as you make it.
 
 It keys off the folder, not the way the terminal was opened, so it works with any project launcher (Project Launcher, Tableau, a tmux sessionizer, or plain `cd`).
@@ -28,14 +28,14 @@ Then click the palette icon (󰏘) on the right of the bar.
 2. Choose **Turn on**. The panel lists the files it adds a block to, and **Show exact lines** shows every line first (see [What it changes](#what-it-changes)). Nothing changes before this.
 3. Press **Enter** to open your first project in a new terminal, in its color.
 
-After that, the bar icon, `Super+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`. Without the icon, `omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'` opens it too.
+After that, the bar icon, `Super+Ctrl+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`. Without the icon, `omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'` opens it too.
 
 ## Keys
 
 | Keys | What it does |
 |---|---|
-| `Super+Alt+1` … `Super+Alt+9` | Open project N, or jump to its open window |
-| `Super+Alt+0` | Open the settings panel |
+| `Super+Ctrl+Alt+1` … `Super+Ctrl+Alt+9` | Open project N, or jump to its open window |
+| `Super+Ctrl+Alt+0` | Open the settings panel |
 
 In the panel:
 
@@ -64,10 +64,9 @@ while it is open, and new prompts use them right away.
 ~/code/shop             #1a3a5a
 ~/code/blog             #213f12     # anything after " # " is a comment
 ~/work/api-gateway      #681e1e
-replace-group-keys = no
 ```
 
-The first project line opens with `Super+Alt+1`, the second with `Super+Alt+2`, and so on. You can have more than nine projects: the rest get colors but no key.
+The first project line opens with `Super+Ctrl+Alt+1`, the second with `Super+Ctrl+Alt+2`, and so on. You can have more than nine projects: the rest get colors but no key. A `replace-group-keys` line from versions before 0.5 does nothing now and can be deleted.
 
 ## What it changes
 
@@ -78,12 +77,12 @@ The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-
 | `~/.bashrc` | Sources the hook that sets the terminal color before each prompt |
 | `~/.zshrc` | The same for zsh, only if zsh is installed and you use it |
 | `~/.config/fish/conf.d/colorful-terminals.fish` | The same for fish, in a file of its own, only if fish is installed and you use it |
-| `~/.config/hypr/hyprland.lua` | Loads the `Super+Alt+0…9` keys |
+| `~/.config/hypr/hyprland.lua` | Loads the `Super+Ctrl+Alt+0…9` keys |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Adds **Style › Colorful Terminals** to the Omarchy menu |
 
 Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink.
 
-`Super+Alt+1…5` are also Omarchy's "switch to group window" keys. When you turn it on, a switch lets projects have them (the default; `Super+Alt+Tab` still switches group tabs) or leaves Omarchy's keys in place. The choice is saved as `replace-group-keys` and can be changed in the panel at any time. Nothing needs sudo, nothing goes over the network, and nothing is collected.
+The keys are `Super+Ctrl+Alt` because every other `Super`+digit combination is Omarchy's: workspaces, moving windows, bar panels, and group tabs on `Super+Alt`. So the plugin never takes a key of Omarchy's. If you bind something of your own to a `Super+Ctrl+Alt`+digit, the panel says so. Nothing needs sudo, nothing goes over the network, and nothing is collected.
 
 ## Remove
 
@@ -119,7 +118,7 @@ Add the folder in the panel. The shell hook sends the standard OSC 11 escape cod
 With any terminal that supports OSC 11: Ghostty (Omarchy's default), Kitty, Alacritty and foot all do. And with bash, zsh and fish, in tmux or not.
 
 **Can I tell projects apart at a glance in Hyprland?**
-Yes: every project terminal has its own color, and its window gets the app id `org.omarchy.project_<name>`, so `Super+Alt+N` finds it again instead of opening a second one.
+Yes: every project terminal has its own color, and its window gets the app id `org.omarchy.project_<name>`, so `Super+Ctrl+Alt+N` finds it again instead of opening a second one.
 
 **Does it need a project launcher?**
 No, and it works alongside one. The color depends only on the current folder.

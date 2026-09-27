@@ -43,7 +43,7 @@ ShellRoot {
       Text {
         x: 64; y: 104
         textFormat: Text.PlainText
-        text: "Every project gets its own terminal color. Super+Alt+1…9 opens it."
+        text: "Every project gets its own terminal color. Super+Ctrl+Alt+1…9 opens it."
         color: Util.alpha(Color.foreground, 0.7)
         font.family: Style.font.family
         font.pixelSize: 20
@@ -63,7 +63,7 @@ ShellRoot {
             border.color: Util.alpha(Color.foreground, 0.18)
             border.width: 1
             Rectangle {
-              x: 540; y: 14
+              anchors.right: parent.right; anchors.rightMargin: 14; y: 14
               width: keyLabel.implicitWidth + 20
               height: keyLabel.implicitHeight + 10
               radius: 6
@@ -72,7 +72,7 @@ ShellRoot {
                 id: keyLabel
                 anchors.centerIn: parent
                 textFormat: Text.PlainText
-                text: "Super+Alt+" + modelData.key
+                text: "Super+Ctrl+Alt+" + modelData.key
                 color: Color.foreground
                 font.family: Style.font.family
                 font.pixelSize: 16
@@ -141,7 +141,7 @@ ShellRoot {
               { n: 2, path: "~/code/blog", color: "#213f12", name: "blog", exists: true },
               { n: 3, path: "~/work/api-gateway", color: "#681e1e", name: "api-gateway", exists: true }
             ],
-            palette: test.palette, problems: [], integration: { installed: true }, replaceGroupKeys: false
+            palette: test.palette, problems: [], integration: { installed: true }
           })
           scan: ({ currentDir: "", repos: [], conflicts: [] })
           Component.onCompleted: Qt.callLater(function() { view.selected = 2 })
