@@ -55,20 +55,6 @@ Column {
     }
   }
 
-  Toggle {
-    visible: setup.view.conflicts.length > 0
-    width: parent.width
-    label: setup.view.keysLabel
-    description: setup.view.keysDescription(setup.view.setupReplace)
-    checked: setup.view.setupReplace
-    hasCursor: setup.view.target === "setupKeys"
-    foreground: setup.view.text
-    accent: setup.view.accent
-    fontFamily: setup.view.fontFamily
-    onClicked: setup.view.setupReplace = !setup.view.setupReplace
-    onHovered: function(on) { if (on) setup.view.pointAt("setupKeys") }
-  }
-
   Row {
     spacing: Style.spacing.controlGap
 

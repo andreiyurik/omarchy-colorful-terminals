@@ -49,15 +49,14 @@ eq "uninstall restores every file byte for byte" "$before" "$(snapshot)"
 ok "uninstall again is harmless" "$helper" integration uninstall --yes
 eq "still the original" "$before" "$(snapshot)"
 
-echo "integration: key choice at install"
+echo "integration: Super+Ctrl+Alt keys"
 omarchy_home
-eq "no key setting before install" "false" "$("$helper" state | jq '.replaceGroupKeysSet')"
-ok "install with project keys first" "$helper" integration install --yes --replace-group-keys yes
-eq "choice saved" "true" "$("$helper" state | jq '.replaceGroupKeys and .replaceGroupKeysSet')"
-fails "bad key choice refused" "$helper" integration install --yes --replace-group-keys maybe
-fails "unknown option refused" "$helper" integration install --yes --force
-ok "keep Omarchy's keys" "$helper" integration install --yes --replace-group-keys no
-eq "choice changed" "false" "$("$helper" state | jq '.replaceGroupKeys')"
+mkdir -p "${conf%/*}"
+printf 'replace-group-keys = yes\n' > "$conf"
+ok "install with a line left from the Super+Alt days" "$helper" integration install --yes
+eq "the old line is harmless" "true" "$("$helper" state | jq '.integration.installed and (.problems | length == 0)')"
+fails "the key choice is gone from install" "$helper" integration install --yes --replace-group-keys yes
+eq "the menu entry does not name keys" "0" "$(grep -c 'Super+Alt' "$(menu)")"
 
 echo "integration: zsh and fish"
 # Stand-ins for the shells, so the helper sees them installed.

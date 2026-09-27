@@ -1,7 +1,10 @@
 -- Colorful Terminals keys, loaded by the marked block in ~/.config/hypr/hyprland.lua.
 --
---   Super+Alt+1…9  open project N in a terminal, or jump to its open window
---   Super+Alt+0    open the Colorful Terminals settings panel
+--   Super+Ctrl+Alt+1…9  open project N in a terminal, or jump to its open window
+--   Super+Ctrl+Alt+0    open the Colorful Terminals settings panel
+--
+-- Super+Ctrl+Alt because every other Super+digit combination is Omarchy's:
+-- workspaces, moving windows, bar panels, and group tabs on Super+Alt.
 --
 -- All nine keys are always bound: the helper reads projects.conf when a key is
 -- pressed, so hand edits work without a reload, and a key without a project
@@ -35,19 +38,15 @@ function M.parse_line(line)
 end
 
 function M.read(conf)
-  local projects, replace = {}, false
+  local projects = {}
   local file = io.open(conf, "r")
-  if not file then return projects, replace end
+  if not file then return projects end
   for line in file:lines() do
     local kind, a, b = M.parse_line(line)
-    if kind == "project" then
-      projects[#projects + 1] = { path = a, color = b }
-    elseif kind == "setting" and a == "replace-group-keys" then
-      replace = (b == "yes")
-    end
+    if kind == "project" then projects[#projects + 1] = { path = a, color = b } end
   end
   file:close()
-  return projects, replace
+  return projects
 end
 
 local function folder_name(path)
@@ -60,18 +59,17 @@ function M.setup(dir)
   local home = os.getenv("HOME") or ""
   local conf = home .. "/.config/colorful-terminals/projects.conf"
   local helper = o.shell_quote(dir .. "/bin/colorful-terminals")
-  local projects, replace = M.read(conf)
+  local projects = M.read(conf)
 
   for n = 1, 9 do
-    local keys = "SUPER + ALT + code:" .. tostring(n + 9)
-    if replace then hl.unbind(keys) end
+    local keys = "SUPER + CTRL + ALT + code:" .. tostring(n + 9)
     local project = projects[n]
     local description = project and ("Project " .. n .. ": " .. folder_name(project.path))
       or ("Project " .. n .. " (not set, opens Colorful Terminals)")
     o.bind(keys, description, helper .. " open " .. n)
   end
 
-  o.bind("SUPER + ALT + code:19", "Colorful Terminals settings",
+  o.bind("SUPER + CTRL + ALT + code:19", "Colorful Terminals settings",
     "omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'")
 end
 

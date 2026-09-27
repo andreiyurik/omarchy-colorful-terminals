@@ -10,7 +10,7 @@ FocusScope {
   id: projectsView
 
   // From the helper (`colorful-terminals state` and `scan`).
-  property var config: ({ projects: [], palette: [], problems: [], integration: { installed: true }, replaceGroupKeys: false })
+  property var config: ({ projects: [], palette: [], problems: [], integration: { installed: true } })
   property var scan: ({ currentDir: "", repos: [], conflicts: [] })
   property var dirs: []
   property string preview: ""
@@ -42,7 +42,6 @@ FocusScope {
   property string flashText: ""         // "Saved" in the header, for a moment
   property var undo: null               // last removed project, for Ctrl+Z
   property bool showLines: false
-  property bool setupReplace: true
   property int selectAfterRefresh: -1
   // True from a change until the fresh state is back, so a fast second key
   // press cannot act on an old list (and move the wrong project).
@@ -62,8 +61,9 @@ FocusScope {
   readonly property bool installed: !!(config && config.integration && config.integration.installed)
   readonly property bool adding: mode === "add" || empty
   readonly property bool needsSetup: loaded && !installed && projects.length > 0
+  // Super+Ctrl+Alt+digit keys that something else also uses. Omarchy leaves
+  // them free, so this is the user's own config.
   readonly property var conflicts: Model.conflictsFor(scan.conflicts, projects.length)
-  readonly property bool showKeys: installed && (conflicts.length > 0 || !!config.replaceGroupKeys)
   readonly property var rows: Model.suggestions(query, scan.currentDir, scan.repos, dirs, projects)
 
   // Everything the keyboard cursor can land on, top to bottom.
@@ -71,24 +71,11 @@ FocusScope {
     var t = []
     for (var i = 0; i < projects.length; i++) t.push("project")
     t.push("add")
-    if (showKeys) t.push("keys")
-    if (needsSetup && conflicts.length) t.push("setupKeys")
     if (needsSetup) t.push("install")
     return t
   }
   readonly property string target: targets[selected] || ""
   readonly property var current: target === "project" ? projects[selected] : null
-
-  readonly property string keysLabel: "Super+Alt+"
-    + (conflicts.length ? Model.digitRange(conflicts.map(function(c) { return c.digit })) : "1–9")
-    + " open projects"
-  function keysDescription(on) {
-    var own = conflicts.filter(function(c) { return !c.byCode })
-    var text = on ? "Omarchy's group-tab keys step aside. Super+Alt+Tab still switches tabs."
-                  : "Omarchy also uses them to switch group tabs."
-    if (own.length) text += " Your own binding on Super+Alt+" + own[0].digit + " stays; change it in ~/.config/hypr/bindings.lua."
-    return text
-  }
 
   readonly property color dim: Util.alpha(text, 0.62)
   readonly property alias turnOffDialog: turnOff
@@ -183,7 +170,6 @@ FocusScope {
     note = ""
     hexPreview = ""
     showLines = false
-    setupReplace = config && config.replaceGroupKeysSet ? !!config.replaceGroupKeys : true
     selected = needsSetup ? targets.length - 1 : 0
     turnOff.opened = false
     if (empty) addView.focusField()
@@ -287,9 +273,7 @@ FocusScope {
   }
 
   function install() {
-    var args = ["integration", "install", "--yes"]
-    if (conflicts.length) args.push("--replace-group-keys", setupReplace ? "yes" : "no")
-    request(args)
+    request(["integration", "install", "--yes"])
   }
 
   function askTurnOff() {
@@ -298,15 +282,9 @@ FocusScope {
     turnOff.opened = true
   }
 
-  function toggleReplace() {
-    request(["set", "replace-group-keys", config.replaceGroupKeys ? "no" : "yes"])
-  }
-
   function activate() {
     if (target === "project") { if (current.exists) openProject(current.n) }
     else if (target === "add") startAdd()
-    else if (target === "keys") toggleReplace()
-    else if (target === "setupKeys") setupReplace = !setupReplace
     else if (target === "install") install()
   }
 
@@ -424,6 +402,7 @@ FocusScope {
       width: parent.width
       spacing: Style.spacing.sm
       visible: projectsView.error !== "" || projectsView.note !== "" || problemsText.problems.length > 0 || themeLine.visible
+        || projectsView.conflicts.length > 0
 
       Text {
         visible: projectsView.error !== ""
@@ -460,6 +439,22 @@ FocusScope {
             + Model.plain(first.text, 50) + "”. A project line is a folder and a color, like ~/code/shop #1a3a5a."
         }
         color: projectsView.urgent
+        font.family: projectsView.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+      Text {
+        visible: projectsView.conflicts.length > 0
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        text: {
+          var c = projectsView.conflicts[0]
+          if (!c) return ""
+          var more = projectsView.conflicts.length > 1 ? " (and " + (projectsView.conflicts.length - 1) + " more)" : ""
+          return "Super+Ctrl+Alt+" + c.digit + " also runs “" + Model.plain(c.description, 60) + "”" + more
+            + " from your Hyprland config. Both happen when you press it."
+        }
+        color: projectsView.dim
         font.family: projectsView.fontFamily
         font.pixelSize: Style.font.bodySmall
       }
@@ -567,28 +562,6 @@ FocusScope {
       visible: projectsView.adding
       width: parent.width
       view: projectsView
-    }
-
-    // Super+Alt+digit keys, only when Omarchy uses them too
-    Column {
-      visible: projectsView.showKeys && !projectsView.adding
-      width: parent.width
-      spacing: Style.space(12)
-
-      PanelSeparator { foreground: projectsView.text }
-
-      Toggle {
-        width: parent.width
-        label: projectsView.keysLabel
-        description: projectsView.keysDescription(!!projectsView.config.replaceGroupKeys)
-        checked: !!projectsView.config.replaceGroupKeys
-        hasCursor: projectsView.target === "keys"
-        foreground: projectsView.text
-        accent: projectsView.accent
-        fontFamily: projectsView.fontFamily
-        onClicked: projectsView.toggleReplace()
-        onHovered: function(on) { if (on) projectsView.pointAt("keys") }
-      }
     }
 
     // One-time setup

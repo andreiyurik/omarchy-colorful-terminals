@@ -35,16 +35,14 @@ Projects (stored in ${_ct_file/#"$HOME"/\~}):
   add <folder> [#rrggbb]   Add a project; without a color it gets a free one
       [--at <n>]           ...at position n instead of the end
   remove <n>               Remove project n
-  move <n> up|down         Move project n, which changes its Super+Alt key
+  move <n> up|down         Move project n, which changes its Super+Ctrl+Alt key
   color <n> <#rrggbb>      Change the color of project n
-  set replace-group-keys yes|no
-                           Let project keys replace other Super+Alt+digit keys
   open <n>                 Open project n in a terminal, or focus its window
 
 Integration (shell hooks for bash, zsh and fish, Hyprland keys, Omarchy menu entry):
   integration status       Show what is installed
   integration preview      Show exactly what install would add
-  integration install [--yes] [--replace-group-keys yes|no]
+  integration install [--yes]
   integration uninstall [--yes]
 EOF
 }
@@ -89,8 +87,8 @@ read_config() {
 default_header() {
   lines=(
     "# Colorful Terminals: one project per line, the folder and then its color."
-    "# The 1st project opens with Super+Alt+1, the 2nd with Super+Alt+2, up to 9."
-    "# Colors are #rrggbb. Edit here or in the panel (Super+Alt+0); both stay in sync."
+    "# The 1st project opens with Super+Ctrl+Alt+1, the 2nd with Super+Ctrl+Alt+2, up to 9."
+    "# Colors are #rrggbb. Edit here or in the panel (Super+Ctrl+Alt+0); both stay in sync."
     ""
   )
 }
@@ -160,9 +158,9 @@ cmd_list() {
   fi
   local i key
   for i in "${!_ct_paths[@]}"; do
-    key="Super+Alt+$((i + 1))"
+    key="Super+Ctrl+Alt+$((i + 1))"
     ((i < max_keys)) || key="(no key)"
-    printf '%-2s %-12s %s  %s\n' "$((i + 1))" "$key" "${_ct_colors[i]}" "$(display_path "${_ct_paths[i]}")"
+    printf '%-2s %-17s %s  %s\n' "$((i + 1))" "$key" "${_ct_colors[i]}" "$(display_path "${_ct_paths[i]}")"
   done
 }
 
@@ -212,7 +210,7 @@ cmd_add() {
   write_config
   reload_hyprland
   if ((n <= max_keys)); then
-    echo "Added $(display_path "$folder") as project $n (Super+Alt+$n)"
+    echo "Added $(display_path "$folder") as project $n (Super+Ctrl+Alt+$n)"
   else
     echo "Added $(display_path "$folder") as project $n (colors only; keys go up to $max_keys)"
   fi
@@ -268,31 +266,8 @@ cmd_color() {
   echo "$_ct_path_text is now $(lower "$2")"
 }
 
-cmd_set() {
-  (($# == 2)) || die "usage: colorful-terminals set replace-group-keys yes|no"
-  [[ $1 == replace-group-keys ]] || die "unknown setting '$1'"
-  [[ $2 == yes || $2 == no ]] || die "replace-group-keys is yes or no"
-  lock_config
-  read_config
-  ((${#lines[@]})) || default_header
-  local i done=0 first_project=${project_lines[0]-${#lines[@]}}
-  for i in "${!lines[@]}"; do
-    _ct_parse_line "${lines[i]}"
-    if [[ $_ct_kind == setting && $_ct_key == "$1" ]]; then
-      lines[i]="$1 = $2"
-      done=1
-    fi
-  done
-  if ((!done)); then
-    lines=("${lines[@]:0:first_project}" "$1 = $2" "" "${lines[@]:first_project}")
-  fi
-  write_config
-  reload_hyprland
-  echo "$1 = $2"
-}
-
 # Keys read projects.conf when pressed; the reload only refreshes their names
-# in the keybindings list, and applies replace-group-keys.
+# in the keybindings list.
 reload_hyprland() {
   if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE-} ]] && command -v hyprctl > /dev/null && has_block hyprland; then
     timeout 5 hyprctl reload > /dev/null 2>&1 || true
@@ -341,7 +316,7 @@ cmd_open() {
   fi
   local dir=${_ct_paths[$((n - 1))]} app_id
   if [[ ! -d $dir ]]; then
-    notify "Project folder not found" "$(display_path "$dir") no longer exists. Press Super+Alt+0 to fix the list."
+    notify "Project folder not found" "$(display_path "$dir") no longer exists. Press Super+Ctrl+Alt+0 to fix the list."
     exit 1
   fi
   app_id=$(app_id_for "$n")
@@ -353,7 +328,7 @@ cmd_open() {
 
 cmd_state() {
   read_config
-  local fields=() problems=() i line replace_set=false
+  local fields=() problems=() i line
   for i in "${!project_lines[@]}"; do
     parse_project $((i + 1))
     fields+=("$_ct_path_text" "$_ct_path" "$_ct_color" "$([[ -d $_ct_path ]] && echo 1 || echo 0)")
@@ -363,10 +338,11 @@ cmd_state() {
     line=${lines[i]}
     _ct_parse_line "$line"
     [[ $_ct_kind == problem ]] && problems+=("$((i + 1))" "${line:0:200}")
+    # replace-group-keys was a setting when the keys were Super+Alt; an old
+    # line is harmless, so it is not reported.
     if [[ $_ct_kind == setting && $_ct_key != replace-group-keys ]]; then
       problems+=("$((i + 1))" "${line:0:200}")
     fi
-    [[ $_ct_kind == setting && $_ct_key == replace-group-keys ]] && replace_set=true
   done
   local palette=() light=() status
   for i in "${!palette_colors[@]}"; do palette+=("${palette_names[i]}" "${palette_colors[i]}"); done
@@ -374,8 +350,6 @@ cmd_state() {
   status=$(integration_json)
   jq -n -c \
     --arg file "$(display_path "$_ct_file")" \
-    --arg replace "$_ct_replace_group_keys" \
-    --argjson replaceSet "$replace_set" \
     --argjson integration "$status" \
     --argjson projects "$(json_groups 4 "${fields[@]}")" \
     --argjson problems "$(json_groups 2 "${problems[@]}")" \
@@ -383,8 +357,6 @@ cmd_state() {
     --argjson light "$(json_groups 2 "${light[@]}")" \
     '{
       file: $file,
-      replaceGroupKeys: ($replace == "yes"),
-      replaceGroupKeysSet: $replaceSet,
       integration: $integration,
       projects: [$projects | to_entries[] | {
         n: (.key + 1), path: .value[0], abs: .value[1], color: (.value[2] | ascii_downcase),
@@ -437,9 +409,9 @@ find_repos() {
   jq -n -c '$ARGS.positional' --args "${list[@]}"
 }
 
-# Other Super+Alt+digit keys, so the panel can show them instead of silently
+# Other Super+Ctrl+Alt+digit keys, so the panel can show them instead of silently
 # fighting over them. Reads the text form of `hyprctl binds`: in the JSON form,
-# keys bound by keycode (Omarchy's "SUPER + ALT + code:10") have no key at all.
+# keys bound by keycode ("SUPER + CTRL + ALT + code:10") have no key at all.
 # Our own keys are recognized by their descriptions (see hypr/keys.lua).
 find_conflicts() {
   if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE-} ]] || ! command -v hyprctl > /dev/null; then
@@ -453,7 +425,7 @@ find_conflicts() {
 binds_to_conflicts() {
   awk '
     function flush() {
-      if (mods == "72" && submap == "") {
+      if (mods == "76" && submap == "") {
         digit = ""; by_code = "false"
         if (key ~ /code:1[0-9]$/) { code = substr(key, length(key) - 1) + 0; digit = (code - 9) % 10; by_code = "true" }
         else if (key ~ /^[0-9]$/) digit = key
@@ -538,7 +510,7 @@ target_what() {
     bashrc) printf 'bash: colors terminals as you cd' ;;
     zshrc) printf 'zsh: colors terminals as you cd' ;;
     fish) printf 'fish: colors terminals as you cd' ;;
-    hyprland) printf 'Super+Alt+0–9 keys' ;;
+    hyprland) printf 'Super+Ctrl+Alt+0–9 keys' ;;
     menu) printf 'Omarchy menu: Style › Colorful Terminals' ;;
   esac
 }
@@ -606,7 +578,7 @@ block_body() {
         "$(lua_path "$plugin_dir")"
       ;;
     menu)
-      printf '  "style.colorful-terminals": {"icon":"󰏘","label":"Colorful Terminals","description":"Terminal color and Super+Alt key for each project","action":"omarchy-shell shell toggle %s '"'"'{}'"'"'"},\n' "$PLUGIN_ID"
+      printf '  "style.colorful-terminals": {"icon":"󰏘","label":"Colorful Terminals","description":"Terminal color and hotkey for each project","action":"omarchy-shell shell toggle %s '"'"'{}'"'"'"},\n' "$PLUGIN_ID"
       ;;
   esac
 }
@@ -648,16 +620,11 @@ where_text() {
 }
 
 cmd_integration() {
-  local action=${1-status} yes=0 replace=""
+  local action=${1-status} yes=0
   shift || true
   while (($#)); do
     case $1 in
       --yes | -y) yes=1 ;;
-      --replace-group-keys)
-        replace=${2-}
-        [[ $replace == yes || $replace == no ]] || die "--replace-group-keys is yes or no"
-        shift
-        ;;
       *) die "unknown option '$1'" ;;
     esac
     shift
@@ -667,8 +634,6 @@ cmd_integration() {
     preview) integration_preview ;;
     install)
       confirm "$yes" "Add these blocks?" integration_preview
-      # Saved first, so the keys block reads the choice when Hyprland loads it.
-      [[ -z $replace ]] || cmd_set replace-group-keys "$replace" > /dev/null
       integration_install
       ;;
     uninstall) confirm "$yes" "Remove the Colorful Terminals blocks?" true && integration_uninstall ;;
@@ -744,7 +709,7 @@ strip_block() {
 integration_install() {
   local t
   for t in "${targets[@]}"; do install_block "$t"; done
-  echo "Installed. Open a new terminal to see project colors; Super+Alt+0 opens the settings."
+  echo "Installed. Open a new terminal to see project colors; Super+Ctrl+Alt+0 opens the settings."
 }
 
 install_block() {
@@ -846,7 +811,6 @@ main() {
     remove) cmd_remove "$@" ;;
     move) cmd_move "$@" ;;
     color) cmd_color "$@" ;;
-    set) cmd_set "$@" ;;
     open) cmd_open "$@" ;;
     state) cmd_state "$@" ;;
     scan) cmd_scan "$@" ;;

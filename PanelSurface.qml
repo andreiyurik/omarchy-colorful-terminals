@@ -58,7 +58,7 @@ PanelWindow {
 
       loaded: !!(panel.controller && panel.controller.config)
       config: (panel.controller && panel.controller.config)
-        || ({ projects: [], palette: [], problems: [], integration: { installed: true }, replaceGroupKeys: false })
+        || ({ projects: [], palette: [], problems: [], integration: { installed: true } })
       scan: panel.controller ? panel.controller.scan : ({ currentDir: "", repos: [], conflicts: [] })
       dirs: panel.controller ? panel.controller.dirs : []
       preview: panel.controller ? panel.controller.preview : ""

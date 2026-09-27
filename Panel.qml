@@ -2,7 +2,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 
-// Colorful Terminals settings panel. Summoned with Super+Alt+0, from the
+// Colorful Terminals settings panel. Summoned with Super+Ctrl+Alt+0, from the
 // Omarchy menu (Style > Colorful Terminals), or with:
 //   omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'
 // This file holds the state and talks to bin/colorful-terminals, always with

@@ -16,7 +16,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: "󰏘"
-    tooltipText: "Colorful Terminals: project colors and Super+Alt keys"
+    tooltipText: "Colorful Terminals: project colors and hotkeys"
     onPressed: function(buttonCode) {
       Quickshell.execDetached(["omarchy-shell", "shell", "toggle", root.moduleName, "{}"])
     }

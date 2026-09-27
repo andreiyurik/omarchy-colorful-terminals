@@ -24,7 +24,7 @@ Column {
     textFormat: Text.PlainText
     width: parent.width
     wrapMode: Text.WordWrap
-    text: "Pick a folder. Its terminals get their own color, and Super+Alt+1 opens it."
+    text: "Pick a folder. Its terminals get their own color, and Super+Ctrl+Alt+1 opens it."
     color: add.view.text
     font.family: add.view.fontFamily
     font.pixelSize: Style.font.body

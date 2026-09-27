@@ -6,9 +6,9 @@
 # File format, one entry per line:
 #   ~/code/shop        #243453      project folder, then its color
 #   ~/code/blog  #23402f  # note    anything after " # " is a comment
-#   replace-group-keys = yes        a setting
+#   some-setting = value            a setting (none are in use today)
 #   # comment                       ignored
-# The Nth project line opens with Super+Alt+N.
+# The Nth project line opens with Super+Ctrl+Alt+N.
 
 _ct_file="$HOME/.config/colorful-terminals/projects.conf"
 
@@ -57,16 +57,15 @@ _ct_parse_line() {
   _ct_kind=project
 }
 
-# Fills _ct_paths/_ct_colors (projects in order) and _ct_replace_group_keys.
+# Fills _ct_paths/_ct_colors (projects in order).
 _ct_load() {
-  _ct_paths=() _ct_colors=() _ct_replace_group_keys=no
+  _ct_paths=() _ct_colors=()
   [[ -r $_ct_file ]] || return 0
   local line
   while IFS= read -r line || [[ -n $line ]]; do
     _ct_parse_line "$line"
     case $_ct_kind in
       project) _ct_paths+=("$_ct_path") _ct_colors+=("$_ct_color") ;;
-      setting) [[ $_ct_key == replace-group-keys ]] && _ct_replace_group_keys=$_ct_value ;;
     esac
   done < "$_ct_file"
 }

@@ -95,14 +95,14 @@ function stepColor(palette, color, step) {
 }
 
 function keyLabel(n) {
-  return n >= 1 && n <= MAX_KEYS ? "Super+Alt+" + n : "No key"
+  return n >= 1 && n <= MAX_KEYS ? "Super+Ctrl+Alt+" + n : "No key"
 }
 
-// "4 projects · Super+Alt+1–4" for the panel header.
+// "4 projects · Super+Ctrl+Alt+1–4" for the panel header.
 function summary(count) {
   if (!count) return "A color for every project"
   var keys = Math.min(count, MAX_KEYS)
-  return count + (count === 1 ? " project" : " projects") + " · Super+Alt+" + (keys === 1 ? "1" : "1–" + keys)
+  return count + (count === 1 ? " project" : " projects") + " · Super+Ctrl+Alt+" + (keys === 1 ? "1" : "1–" + keys)
 }
 
 // The few key hints worth showing for what is on screen. ctx: {mode, target,
@@ -115,8 +115,6 @@ function hints(ctx) {
   if (c.target === "project") {
     if (c.missing) out.push(["Del", "remove"])
     else out.push(["←→", "color"], ["Enter", "open"])
-  } else if (c.target === "keys") {
-    out.push(["Space", "switch"])
   } else if (c.target === "install") {
     out.push(["Enter", "turn on"])
   }

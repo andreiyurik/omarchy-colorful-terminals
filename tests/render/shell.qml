@@ -22,14 +22,14 @@ ShellRoot {
   ]
   readonly property var bashFiles: [
     { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
-    { file: "~/.config/hypr/hyprland.lua", what: "Super+Alt+0–9 keys" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt+0–9 keys" },
     { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
   ]
   readonly property var allFiles: [
     { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
     { file: "~/.zshrc", what: "zsh: colors terminals as you cd" },
     { file: "~/.config/fish/conf.d/colorful-terminals.fish", what: "fish: colors terminals as you cd" },
-    { file: "~/.config/hypr/hyprland.lua", what: "Super+Alt+0–9 keys" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt+0–9 keys" },
     { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
   ]
   function project(n, path, color, exists) {
@@ -38,15 +38,12 @@ ShellRoot {
   }
   function config(projects, extra) {
     var c = { projects: projects, palette: palette, paletteLight: paletteLight, problems: [], integration: { installed: true, files: bashFiles },
-              replaceGroupKeys: false, replaceGroupKeysSet: false, file: "~/.config/colorful-terminals/projects.conf" }
+              file: "~/.config/colorful-terminals/projects.conf" }
     for (var k in extra || {}) c[k] = extra[k]
     return c
   }
-  function groupKeys(n) {
-    var out = []
-    for (var d = 1; d <= n; d++) out.push({ digit: d, description: "Switch to group window " + d, byCode: true })
-    return out
-  }
+  // A binding of the user's own on a project key; Omarchy has none there.
+  readonly property var ownBinding: [{ digit: 2, description: "Open my notes", byCode: false }]
   readonly property var fourProjects: [
     project(1, "~/code/shop", "#1a3a5a"), project(2, "~/code/blog", "#213f12"),
     project(3, "~/work/api-gateway", "#681e1e"), project(4, "~/work/api-gateway/admin", "#4c2276")
@@ -55,11 +52,11 @@ ShellRoot {
   readonly property var noScan: ({ currentDir: "", repos: [], conflicts: [] })
 
   readonly property var scenarios: [
-    { name: "main", select: 1, config: config(fourProjects), scan: { currentDir: "", repos: [], conflicts: groupKeys(5) } },
+    { name: "main", select: 1, config: config(fourProjects), scan: { currentDir: "", repos: [], conflicts: [] } },
     { name: "empty", config: config([], { integration: { installed: false } }),
       scan: { currentDir: "~/code/omarchy-colorful-terminals", repos: ["~/code/omarchy-colorful-terminals", "~/code/shop", "~/code/blog", "~/Projects/dotfiles", "~/work/api-gateway"], conflicts: [] } },
     { name: "setup", config: config(fourProjects.slice(0, 2), { integration: { installed: false, files: allFiles }, problems: [{ line: 7, text: "~/notes   green" }] }),
-      scan: { currentDir: "", repos: [], conflicts: groupKeys(5) }, preview: previewText },
+      scan: { currentDir: "", repos: [], conflicts: [] }, preview: previewText },
     { name: "setup-lines", lines: true, config: config(fourProjects.slice(0, 1), { integration: { installed: false, files: bashFiles } }),
       scan: noScan, preview: previewText },
     { name: "add", mode: "add", query: "~/co", dirs: ["~/code", "~/company"],
@@ -70,6 +67,7 @@ ShellRoot {
       config: config([project(1, "~/code/shop", "#1a3a5a"), project(2, "~/old/gone", "#213f12", false)]), scan: noScan },
     { name: "undo", select: 0, undo: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
     { name: "turn-off", confirm: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
+    { name: "own-binding", select: 0, config: config(fourProjects.slice(0, 3)), scan: { currentDir: "", repos: [], conflicts: ownBinding } },
     { name: "light", select: 0, light: true, config: config([project(1, "~/code/shop", "#c3d9f7"), project(2, "~/code/blog", "#d4edbf"),
       project(3, "~/work/api-gateway", "#681e1e")]), scan: noScan }
   ]
@@ -115,6 +113,10 @@ ShellRoot {
     }
   }
 
+  function scenario(name) {
+    for (var i = 0; i < scenarios.length; i++) if (scenarios[i].name === name) return scenarios[i]
+    return null
+  }
   function check(name, expected, actual) {
     var same = JSON.stringify(expected) === JSON.stringify(actual)
     console.log((same ? "PASS: " : "FAIL: ") + name + (same ? "" : " (expected " + expected + ", got " + actual + ")"))
@@ -129,7 +131,7 @@ ShellRoot {
   }
 
   function checkKeys() {
-    test.load(test.scenarios[0])
+    test.load(test.scenario("main"))
     view.selected = 1
     test.check("right arrow picks the next color", "color 2 #681e1e", key(Qt.Key_Right))
     test.check("the new color shows at once", "#681e1e", rowTint(1))
@@ -161,8 +163,7 @@ ShellRoot {
     view.selected = 1
     test.check("enter opens the selected project", 2, (key(Qt.Key_Return), view.opened))
     test.check("digit selects a row", 3, (key(Qt.Key_4), view.selected))
-    view.selected = view.targets.indexOf("keys")
-    test.check("space on the keys switch saves it", "set replace-group-keys yes", key(Qt.Key_Space))
+    test.check("no keys switch any more", -1, view.targets.indexOf("keys"))
     view.selected = 0
     key(0x6c4, { nativeScanCode: 38 })   // Cyrillic ф, same key as A
     test.check("A works on a Russian layout", "add", view.mode)
@@ -185,21 +186,20 @@ ShellRoot {
     view.query = "Ё.code"
     test.check("a path typed on the Russian layout is added", "add ~/code #621d4b", (view.lastRun = null, view.addHighlighted(), view.lastRun))
 
-    test.load(test.scenarios[2])
+    test.load(test.scenario("setup"))
     test.check("readable colors are not flagged", false, view.colorsNeedWork)
     test.check("setup puts the cursor on Turn on", "install", view.target)
-    test.check("turn on gives projects the keys by default", "integration install --yes --replace-group-keys yes", key(Qt.Key_Return))
-    view.selected = view.targets.indexOf("setupKeys")
-    key(Qt.Key_Space)
-    view.selected = view.targets.indexOf("install")
-    test.check("or keeps Omarchy's keys", "integration install --yes --replace-group-keys no", key(Qt.Key_Return))
+    test.check("turn on changes no keys of Omarchy's", "integration install --yes", key(Qt.Key_Return))
 
-    test.load(test.scenarios[9])
+    test.load(test.scenario("own-binding"))
+    test.check("a binding of your own on a project key is named", 1, view.conflicts.length)
+
+    test.load(test.scenario("light"))
     test.check("a light theme gets the light palette", "#c3d9f7", view.palette[0].color)
     test.check("a new project gets a light color", "add ~/code/new #f7c9c9", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
     test.check("only the dark color is flagged", true, view.colorsNeedWork)
 
-    test.load(test.scenarios[6])
+    test.load(test.scenario("missing"))
     view.selected = 1
     test.check("a missing folder has no color to change", null, key(Qt.Key_Right))
     test.check("and does not open", 0, (view.opened = 0, key(Qt.Key_Return), view.opened))

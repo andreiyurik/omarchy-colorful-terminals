@@ -48,7 +48,6 @@ replace-group-keys = yes
 EOF
 _ct_load
 eq "every project line counts, duplicates too" "5" "${#_ct_paths[@]}"
-eq "setting read" "yes" "$_ct_replace_group_keys"
 match() { _ct_match_dir "$1"; printf '%s' "$_ct_match"; }
 eq "project folder" "#111111" "$(match "$HOME/code/shop")"
 eq "subfolder inherits" "#111111" "$(match "$HOME/code/shop/src/lib")"
@@ -73,22 +72,22 @@ fails "missing folder" h add '~/nope'
 fails "relative folder" h add 'code/shop'
 fails "bad color" h add '~/code/api' '#12'
 ok "folder with spaces" h add '~/My Projects/web app'
-eq "list" "1  Super+Alt+1  #1a3a5a  ~/code/shop
-2  Super+Alt+2  #213f12  ~/code/blog
-3  Super+Alt+3  #abcdef  ~/code/api
-4  Super+Alt+4  #681e1e  ~/My Projects/web app" "$(h list)"
+eq "list" "1  Super+Ctrl+Alt+1  #1a3a5a  ~/code/shop
+2  Super+Ctrl+Alt+2  #213f12  ~/code/blog
+3  Super+Ctrl+Alt+3  #abcdef  ~/code/api
+4  Super+Ctrl+Alt+4  #681e1e  ~/My Projects/web app" "$(h list)"
 
 ok "move 3 up" h move 3 up
 eq "order after move" "~/code/api" "$(h list | sed -n 2p | awk '{print $4}')"
 ok "move top up is harmless" h move 1 up
 fails "move needs a direction" h move 1 sideways
 ok "recolor" h color 1 '#010203'
-eq "recolor keeps folder" "1  Super+Alt+1  #010203  ~/code/shop" "$(h list | sed -n 1p)"
+eq "recolor keeps folder" "1  Super+Ctrl+Alt+1  #010203  ~/code/shop" "$(h list | sed -n 1p)"
 ok "remove 2" h remove 2
 fails "remove out of range" h remove 9
 fails "remove zero" h remove 0
 ok "undo puts it back in place" h add '~/code/api' '#abcdef' --at 2
-eq "undo position" "2  Super+Alt+2  #abcdef  ~/code/api" "$(h list | sed -n 2p)"
+eq "undo position" "2  Super+Ctrl+Alt+2  #abcdef  ~/code/api" "$(h list | sed -n 2p)"
 
 echo "config: hand edits survive"
 new_home
@@ -102,11 +101,8 @@ EOF
 ok "recolor a commented line" "$helper" color 1 '#333333'
 eq "comment kept" "~/a                     #333333   # work" "$(sed -n 2p "$conf")"
 eq "other comment kept" "# keep this comment" "$(sed -n 3p "$conf")"
-ok "setting added" "$helper" set replace-group-keys yes
-eq "setting line" "1" "$(grep -c '^replace-group-keys = yes$' "$conf")"
-ok "setting changed in place" "$helper" set replace-group-keys no
-eq "one setting line" "1" "$(grep -c '^replace-group-keys' "$conf")"
-fails "unknown setting" "$helper" set colors loud
+printf 'replace-group-keys = no\n' >> "$conf"
+fails "set is gone with the Super+Alt keys" "$helper" set replace-group-keys yes
 before=$(cat "$conf")
 ok "move keeps everything else" "$helper" move 1 down
 eq "only the two project lines swapped" "~/b   #222222|# keep this comment|~/a                     #333333   # work" \
@@ -125,7 +121,7 @@ eq "missing folder flagged" "false" "$(jq '.projects[2].exists' <<< "$state")"
 eq "bad line reported" "~/c green" "$(jq -r '.problems[0].text' <<< "$state")"
 eq "palette has 8 colors" "8" "$(jq '.palette | length' <<< "$state")"
 eq "integration not installed" "false" "$(jq '.integration.installed' <<< "$state")"
-eq "explicit key setting reported" "true" "$(jq '.replaceGroupKeysSet' <<< "$state")"
+eq "an old replace-group-keys line is not a problem" "1" "$(jq '.problems | length' <<< "$state")"
 mkdir -p "$HOME/Projects/site/.git" "$HOME/repo/.git" "$HOME/.hidden/x/.git"
 scan=$("$helper" scan)
 eq "repos found, hidden skipped" '["~/Projects/site","~/repo"]' "$(jq -c '.repos | sort' <<< "$scan")"
@@ -137,19 +133,20 @@ mkdir -p "$fake" "$HOME/code/current"
 cat > "$fake/hyprctl" <<'EOF'
 #!/bin/bash
 [[ $1 == binds ]] || exit 0
+printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:10\n\tkeycode: 0\n\tdescription: Open my notes\n\n'
+printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: 2\n\tkeycode: 0\n\tdescription: Project: heartwood\n\n'
+printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:11\n\tkeycode: 0\n\tdescription: Project 2: blog\n\n'
+printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:19\n\tkeycode: 0\n\tdescription: Colorful Terminals settings\n\n'
 printf 'bindd\n\tmodmask: 72\n\tsubmap: \n\tkey: SUPER + ALT + code:10\n\tkeycode: 0\n\tdescription: Switch to group window 1\n\n'
-printf 'bindd\n\tmodmask: 72\n\tsubmap: \n\tkey: 2\n\tkeycode: 0\n\tdescription: Project: heartwood\n\n'
-printf 'bindd\n\tmodmask: 72\n\tsubmap: \n\tkey: SUPER + ALT + code:11\n\tkeycode: 0\n\tdescription: Project 2: blog\n\n'
-printf 'bindd\n\tmodmask: 72\n\tsubmap: \n\tkey: SUPER + ALT + code:19\n\tkeycode: 0\n\tdescription: Colorful Terminals settings\n\n'
 printf 'bindd\n\tmodmask: 64\n\tsubmap: \n\tkey: SUPER + code:10\n\tkeycode: 0\n\tdescription: Switch to workspace 1\n\n'
-printf 'bindd\n\tmodmask: 72\n\tsubmap: resize\n\tkey: 3\n\tkeycode: 0\n\tdescription: In a submap\n'
+printf 'bindd\n\tmodmask: 76\n\tsubmap: resize\n\tkey: 3\n\tkeycode: 0\n\tdescription: In a submap\n'
 EOF
 # shellcheck disable=SC2016 # $HOME expands when the fake runs
 printf '#!/bin/bash\necho "$HOME/code/current"\n' > "$fake/omarchy-cmd-terminal-cwd"
 chmod +x "$fake"/*
 scan=$(PATH="$fake:$PATH" HYPRLAND_INSTANCE_SIGNATURE=test "$helper" scan)
-eq "conflicts: Omarchy keycode bind and a user keysym bind, not ours" \
-  '[{"digit":1,"byCode":true,"description":"Switch to group window 1"},{"digit":2,"byCode":false,"description":"Project: heartwood"}]' \
+eq "conflicts: only Super+Ctrl+Alt digits that are not ours; Omarchy's Super+Alt is no clash" \
+  '[{"digit":1,"byCode":true,"description":"Open my notes"},{"digit":2,"byCode":false,"description":"Project: heartwood"}]' \
   "$(jq -c .conflicts <<< "$scan")"
 eq "current folder of the focused terminal" "~/code/current" "$(jq -r .currentDir <<< "$scan")"
 
