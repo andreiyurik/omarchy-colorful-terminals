@@ -1,0 +1,63 @@
+#!/bin/bash
+# Runs the panel tests against Omarchy's own shell code: the latest release
+# (what users have) and the default branch (what comes next), so a change in
+# Omarchy's panel parts shows up here before it reaches users. Fetches only
+# the shell/ folder of each version; the tests run in a container, offscreen
+# and without network. Needs docker and git.
+#   tests/omarchy/run [release|main|<git ref> ...]   screenshots: tests/omarchy/out/<ref>/
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
+repo_url=https://github.com/basecamp/omarchy
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/colorful-terminals-tests
+if ! command -v docker > /dev/null || ! command -v git > /dev/null; then
+  echo "SKIP: tests/omarchy/run needs docker and git"
+  exit 0
+fi
+
+# release: the newest vX.Y.Z tag. main: the default branch.
+resolve() {
+  case $1 in
+    release)
+      git ls-remote --tags --refs "$repo_url" 'v*' | awk '{print $2}' | sed 's#refs/tags/##' |
+        grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1
+      ;;
+    main) git ls-remote --symref "$repo_url" HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# Checks out just shell/ of <ref> and prints the folder.
+fetch() {
+  local ref=$1 dir="$cache/omarchy-$1"
+  rm -rf "$dir"
+  git -c advice.detachedHead=false clone -q --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo_url" "$dir" &&
+    git -C "$dir" sparse-checkout set shell &&
+    printf '%s %s\n' "$ref" "$(git -C "$dir" rev-parse --short HEAD)" > "$dir/REF" &&
+    printf '%s' "$dir"
+}
+
+refs=("$@")
+((${#refs[@]})) || refs=(release main)
+docker build -q -t colorful-terminals-test:omarchy tests/omarchy > /dev/null || { echo "image build FAILED"; exit 1; }
+status=0
+for name in "${refs[@]}"; do
+  ref=$(resolve "$name")
+  [[ -n $ref ]] || { echo "$name: could not find it in $repo_url"; status=1; continue; }
+  echo "=== Omarchy $name ($ref)"
+  if ! dir=$(fetch "$ref"); then
+    echo "$name: fetch FAILED"
+    status=1
+    continue
+  fi
+  out="$PWD/tests/omarchy/out/$name"
+  rm -rf "$out"
+  mkdir -p "$out"
+  if docker run --rm --network none -v "$PWD:/src:ro" -v "$dir:/omarchy:ro" -v "$out:/out" \
+    --user "$(id -u):$(id -g)" -e HOME=/tmp/home colorful-terminals-test:omarchy /src/tests/omarchy/inside; then
+    echo "$name: ok"
+  else
+    echo "$name: FAILED"
+    status=1
+  fi
+done
+exit "$status"
