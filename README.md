@@ -6,7 +6,7 @@
 
 Give every project its own terminal color, so you always know which project a terminal belongs to.
 
-An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, and `Super+Alt+1…9` hotkeys that open a project or jump to its window.
+An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, and `Super+Alt+1…9` hotkeys that open a project or jump to its window.
 
 ![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
 
@@ -25,7 +25,7 @@ omarchy plugin add https://github.com/andreiyurik/omarchy-colorful-terminals --e
 Then click the palette icon (󰏘) on the right of the bar.
 
 1. Pick a folder: **Enter** adds the one you are in, or type to search your git repositories.
-2. Choose **Turn on**. The panel lists the three files it adds a block to, and **Show exact lines** shows every line first (see [What it changes](#what-it-changes)). Nothing changes before this.
+2. Choose **Turn on**. The panel lists the files it adds a block to, and **Show exact lines** shows every line first (see [What it changes](#what-it-changes)). Nothing changes before this.
 3. Press **Enter** to open your first project in a new terminal, in its color.
 
 After that, the bar icon, `Super+Alt+0`, or **Omarchy menu › Style › Colorful Terminals** opens the panel. To move the icon: `omarchy bar move andreiyurik.colorful-terminals --section left`. Without the icon, `omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'` opens it too.
@@ -71,11 +71,13 @@ The first project line opens with `Super+Alt+1`, the second with `Super+Alt+2`, 
 
 ## What it changes
 
-The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to three files, and only after you choose **Turn on** in the panel:
+The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to each of these files, and only after you choose **Turn on** in the panel:
 
 | File | What the block does |
 |---|---|
 | `~/.bashrc` | Sources the hook that sets the terminal color before each prompt |
+| `~/.zshrc` | The same for zsh, only if zsh is installed and you use it |
+| `~/.config/fish/conf.d/colorful-terminals.fish` | The same for fish, in a file of its own, only if fish is installed and you use it |
 | `~/.config/hypr/hyprland.lua` | Loads the `Super+Alt+0…9` keys |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Adds **Style › Colorful Terminals** to the Omarchy menu |
 
@@ -85,7 +87,7 @@ Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-te
 
 ## Remove
 
-1. In the panel, choose **Turn off…** (or press `Ctrl+U`) and confirm. This removes the three blocks and gives each file back exactly as it was (any edits you made since are kept). The same thing from a terminal:
+1. In the panel, choose **Turn off…** (or press `Ctrl+U`) and confirm. This removes the blocks and gives each file back exactly as it was (any edits you made since are kept). The same thing from a terminal:
 
    ```bash
    ~/.config/omarchy/plugins/andreiyurik.colorful-terminals/bin/colorful-terminals integration uninstall
@@ -101,19 +103,20 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 
 ## Limitations
 
-- **The color changes at the next prompt.** It switches when a command finishes and bash draws its prompt, not in the middle of a running script.
-- **bash only**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Not zsh or fish, and not inside tmux or zellij yet.
-- **Made for dark themes.** On a light theme the panel says so, and marks any color that would make text hard to read.
+- **The color changes at the next prompt.** It switches when a command finishes and the shell draws its prompt, not in the middle of a running script.
+- **bash, zsh and fish**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Inside tmux the tmux pane takes the color instead. Not inside zellij.
+- **Terminals opened before you turn it on** get colors once you open them again; their shell has not loaded the hook yet.
+- **Light themes get a light palette.** Colors picked on a dark theme are marked on a light one, so you can pick a light color instead.
 - A program that paints its own background, such as a full-screen editor theme, covers the color while it runs.
 - Folder names containing ` # ` (space, hash, space) or line breaks are not supported.
 
 ## FAQ
 
 **How do I change the terminal background color per directory?**
-Add the folder in the panel. The bash hook sends the standard OSC 11 escape code whenever you enter it, and OSC 111 to restore the theme color when you leave.
+Add the folder in the panel. The shell hook sends the standard OSC 11 escape code whenever you enter it, and OSC 111 to restore the theme color when you leave. Inside tmux it sets the pane's style instead, so each pane keeps its own color.
 
 **Does it work with my terminal?**
-With any terminal that supports OSC 11: Ghostty (Omarchy's default), Kitty, Alacritty and foot all do.
+With any terminal that supports OSC 11: Ghostty (Omarchy's default), Kitty, Alacritty and foot all do. And with bash, zsh and fish, in tmux or not.
 
 **Can I tell projects apart at a glance in Hyprland?**
 Yes: every project terminal has its own color, and its window gets the app id `org.omarchy.project_<name>`, so `Super+Alt+N` finds it again instead of opening a second one.
@@ -129,7 +132,7 @@ tests/render-panel out # screenshots of the panel in each state (at 2x)
 tests/render-preview   # regenerate preview.png
 ```
 
-The tests never touch your real `~/.bashrc` or `~/.config`.
+The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
 
 ## License
 
