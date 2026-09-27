@@ -1,0 +1,31 @@
+#!/bin/bash
+# Runs the shell tests in Arch, Ubuntu, Debian and Fedora containers, with each
+# distribution's own bash, zsh, fish, tmux and system shell config, as a normal
+# user and without network. Needs docker.
+#   tests/distros/run [arch|ubuntu|debian|fedora ...]
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
+if ! command -v docker > /dev/null; then
+  echo "SKIP: tests/distros/run needs docker"
+  exit 0
+fi
+distros=("$@")
+((${#distros[@]})) || distros=(arch ubuntu debian fedora)
+status=0
+for distro in "${distros[@]}"; do
+  file="tests/distros/$distro.Dockerfile"
+  [[ -f $file ]] || { echo "unknown distribution: $distro" >&2; exit 2; }
+  echo "=== $distro"
+  if ! docker build -q -t "colorful-terminals-test:$distro" -f "$file" tests/distros > /dev/null; then
+    echo "$distro: image build FAILED"
+    status=1
+    continue
+  fi
+  if docker run --rm --network none -v "$PWD:/src:ro" "colorful-terminals-test:$distro" /src/tests/distros/inside; then
+    echo "$distro: ok"
+  else
+    echo "$distro: FAILED"
+    status=1
+  fi
+done
+exit "$status"
