@@ -20,7 +20,7 @@ mkdir -p "$out"
 out=$(realpath "$out")
 QT_QPA_PLATFORM=offscreen CT_RENDER_DIR="$out" timeout 30s quickshell --no-color -p "$work/shell.qml" > "$work/log" 2>&1 || true
 grep -E 'PASS|FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|Cannot|is not a|error' "$work/log" || true
-if grep -qE 'FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|Failed to load' "$work/log" || ! grep -q 'PASS: rendered hex' "$work/log"; then
+if grep -qE 'FAIL|ERROR|TypeError|ReferenceError|Unable to assign|Cannot assign|Binding loop|Failed to load' "$work/log" || ! grep -q 'PASS: rendered hex' "$work/log"; then
   echo "render-panel: FAILED"
   exit 1
 fi

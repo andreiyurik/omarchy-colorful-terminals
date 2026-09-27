@@ -20,7 +20,7 @@ printf '~/first  #1a3a5a\n' > "$home/.config/colorful-terminals/projects.conf"
 HOME="$home" CT_TEST_DIR="$home" QT_QPA_PLATFORM=offscreen HYPRLAND_INSTANCE_SIGNATURE="" \
   timeout 30s quickshell --no-color -p "$work/shell.qml" > "$work/log" 2>&1 || true
 grep -E 'PASS|FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|rror' "$work/log" | grep -v WARN || true
-if grep -qE 'FAIL|TypeError|ReferenceError|Unable to assign|Binding loop|Failed to load' "$work/log" || ! grep -q 'PASS: toggle closes' "$work/log"; then
+if grep -qE 'FAIL|ERROR|TypeError|ReferenceError|Unable to assign|Cannot assign|Binding loop|Failed to load' "$work/log" || ! grep -q 'PASS: toggle closes' "$work/log"; then
   echo "panel-runtime: FAILED"
   exit 1
 fi
