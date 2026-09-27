@@ -1,3 +1,4 @@
 # Rendered screenshots from tests/render-panel
 /out/
 tests/omarchy/out/
+tests/release-vm/out/

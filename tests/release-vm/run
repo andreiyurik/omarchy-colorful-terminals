@@ -1,0 +1,45 @@
+#!/bin/bash
+# The release test: installs the real Omarchy ISO in a QEMU/KVM virtual machine
+# (once; the installed system is cached), then boots a throwaway copy of it and
+# checks the plugin the way a user meets it: `omarchy plugin add`, the bar and
+# the panel, turning it on, the Super+Ctrl+Alt keys pressed on a virtual
+# keyboard, the project terminal and its color, an update, turning it off,
+# and removal. QEMU runs in a container; nothing is installed on this machine.
+#
+#   tests/release-vm/run            the test (installs Omarchy first if needed)
+#   tests/release-vm/run --reinstall   install Omarchy again, then the test
+#
+# Needs docker, /dev/kvm and about 60 GB free. The first run downloads the
+# 6 GB ISO and installs Omarchy (up to 40 minutes); later runs take minutes.
+# Screenshots and logs: tests/release-vm/out/
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
+
+version=${OMARCHY_VERSION:-4.0.4}
+iso_url="https://iso.omarchy.org/omarchy-$version.iso"
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/colorful-terminals-tests/vm
+out="$PWD/tests/release-vm/out"
+
+if ! command -v docker > /dev/null || [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+  echo "SKIP: tests/release-vm/run needs docker and /dev/kvm"
+  exit 0
+fi
+mkdir -p "$cache" "$out"
+
+iso="$cache/omarchy-$version.iso"
+if [[ ! -f $iso.ok ]]; then
+  echo "== Downloading Omarchy $version (6 GB, resumable)"
+  curl -fL -C - -o "$iso" "$iso_url" || { echo "download FAILED"; exit 1; }
+  curl -fsSL -o "$iso.sha256" "$iso_url.sha256" || { echo "checksum download FAILED"; exit 1; }
+  expected=$(awk '{print $1}' "$iso.sha256")
+  echo "== Checking the ISO's sha256"
+  [[ $(sha256sum "$iso" | awk '{print $1}') == "$expected" ]] || { echo "sha256 MISMATCH: $iso"; exit 1; }
+  touch "$iso.ok"
+fi
+
+docker build -q -t colorful-terminals-test:vm tests/release-vm > /dev/null || { echo "image build FAILED"; exit 1; }
+# Root inside the container, for ssh and QEMU; files go back to you on exit.
+docker run --rm --device /dev/kvm -e OWNER="$(id -u):$(id -g)" \
+  -e OMARCHY_VERSION="$version" -e REINSTALL="$([[ ${1-} == --reinstall ]] && echo yes)" \
+  -v "$PWD:/src:ro" -v "$cache:/cache" -v "$iso:/omarchy.iso:ro" -v "$out:/out" \
+  colorful-terminals-test:vm /src/tests/release-vm/inside
