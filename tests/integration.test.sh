@@ -58,6 +58,13 @@ eq "the old line is harmless" "true" "$("$helper" state | jq '.integration.insta
 fails "the key choice is gone from install" "$helper" integration install --yes --replace-group-keys yes
 eq "the menu entry does not name keys" "0" "$(grep -c 'Super+Alt' "$(menu)")"
 
+# Upgrading from 0.4: the menu block still says Super+Alt until it is refreshed.
+omarchy_home
+"$helper" integration install --yes > /dev/null
+sed -i 's/hotkey for each project/Super+Alt key for each project/' "$(menu)"
+ok "installing over an older version" "$helper" integration install --yes
+eq "refreshes the old block in place" "0 1" "$(grep -c 'Super+Alt' "$(menu)") $(grep -c 'BEGIN colorful-terminals' "$(menu)")"
+
 echo "integration: zsh and fish"
 # Stand-ins for the shells, so the helper sees them installed.
 shells_bin=$(mktemp -d)
