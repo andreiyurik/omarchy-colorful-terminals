@@ -1,6 +1,6 @@
 #!/bin/bash
 # Colorful Terminals helper: edits projects.conf, opens projects, and adds or
-# removes the three marked blocks that wire the plugin into bash, Hyprland,
+# removes the marked blocks that wire the plugin into your shells, Hyprland,
 # and the Omarchy menu. The settings panel calls it with argv, never a shell
 # string. Run with no arguments for help.
 
@@ -38,7 +38,7 @@ Projects (stored in ${_ct_file/#"$HOME"/\~}):
                            Let project keys replace other Super+Alt+digit keys
   open <n>                 Open project n in a terminal, or focus its window
 
-Integration (bash hook, Hyprland keys, Omarchy menu entry):
+Integration (shell hooks for bash, zsh and fish, Hyprland keys, Omarchy menu entry):
   integration status       Show what is installed
   integration preview      Show exactly what install would add
   integration install [--yes] [--replace-group-keys yes|no]
@@ -499,19 +499,47 @@ cmd_dirs() {
 
 # --------------------------------------------------------------- integration
 
-targets=(bashrc hyprland menu)
+# Every block the plugin knows. zsh and fish get one only when you use them.
+all_targets=(bashrc zshrc fish hyprland menu)
+fish_dir=${XDG_CONFIG_HOME:-$HOME/.config}/fish
+
+# The blocks this system needs: bash, Hyprland and the menu always; zsh and
+# fish when they are installed and in use (a config of their own, or the login
+# shell). A config alone is not enough: installers such as uv create
+# ~/.zshrc and ~/.config/fish on systems without those shells.
+uses_shell() {
+  local name=$1 config=$2
+  command -v "$name" > /dev/null && [[ -e $config || ${SHELL##*/} == "$name" ]]
+}
+targets=(bashrc)
+if uses_shell zsh "${ZDOTDIR:-$HOME}/.zshrc"; then targets+=(zshrc); fi
+if uses_shell fish "$fish_dir"; then targets+=(fish); fi
+targets+=(hyprland menu)
 
 target_file() {
   case $1 in
     bashrc) printf '%s' "$HOME/.bashrc" ;;
+    zshrc) printf '%s' "${ZDOTDIR:-$HOME}/.zshrc" ;;
+    fish) printf '%s' "$fish_dir/conf.d/colorful-terminals.fish" ;;
     hyprland) printf '%s' "$HOME/.config/hypr/hyprland.lua" ;;
     menu) printf '%s' "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ;;
   esac
 }
 
+# What each block is for, in the panel's words.
+target_what() {
+  case $1 in
+    bashrc) printf 'bash: colors terminals as you cd' ;;
+    zshrc) printf 'zsh: colors terminals as you cd' ;;
+    fish) printf 'fish: colors terminals as you cd' ;;
+    hyprland) printf 'Super+Alt+0–9 keys' ;;
+    menu) printf 'Omarchy menu: Style › Colorful Terminals' ;;
+  esac
+}
+
 target_comment() {
   case $1 in
-    bashrc) printf '#' ;;
+    bashrc | zshrc | fish) printf '#' ;;
     hyprland) printf -- '--' ;;
     menu) printf '  //' ;;
   esac
@@ -530,6 +558,18 @@ bash_path() {
   fi
 }
 
+# A path for fish: "$HOME" and a single-quoted rest, since fish has no %q.
+fish_path() {
+  local rest=$1 prefix=""
+  if [[ $rest == "$HOME"/* ]]; then
+    # shellcheck disable=SC2016 # $HOME is written literally into the fish file
+    prefix='"$HOME"'
+    rest=/${rest#"$HOME"/}
+  fi
+  rest=${rest//\\/\\\\}
+  printf "%s'%s'" "$prefix" "${rest//\'/\\\'}"
+}
+
 lua_string() {
   local s=${1//\\/\\\\}
   printf '"%s"' "${s//\"/\\\"}"
@@ -544,10 +584,16 @@ lua_path() {
 }
 
 block_body() {
-  local hook="$plugin_dir/shell/colorful-terminals.bash"
+  local hook="$plugin_dir/shell/colorful-terminals"
   case $1 in
     bashrc)
-      printf 'if [[ -r %s ]]; then source %s; fi\n' "$(bash_path "$hook")" "$(bash_path "$hook")"
+      printf 'if [[ -r %s ]]; then source %s; fi\n' "$(bash_path "$hook.bash")" "$(bash_path "$hook.bash")"
+      ;;
+    zshrc)
+      printf 'if [[ -r %s ]]; then source %s; fi\n' "$(bash_path "$hook.zsh")" "$(bash_path "$hook.zsh")"
+      ;;
+    fish)
+      printf 'if test -r %s; source %s; end\n' "$(fish_path "$hook.fish")" "$(fish_path "$hook.fish")"
       ;;
     hyprland)
       printf 'do local dir = %s; local f = io.open(dir .. "/hypr/keys.lua"); if f then f:close(); dofile(dir .. "/hypr/keys.lua")(dir) end end\n' \
@@ -571,19 +617,26 @@ has_block() {
   [[ -f $file ]] && grep -qF -- "$(begin_marker "$1")" "$file"
 }
 
+# Installed means every block this system needs is there. "files" lists them
+# for the panel.
 integration_json() {
-  local t args=()
-  for t in "${targets[@]}"; do
+  local t args=() files=() all=true
+  for t in "${all_targets[@]}"; do
     if has_block "$t"; then args+=(--argjson "$t" true); else args+=(--argjson "$t" false); fi
   done
-  jq -n -c "${args[@]}" '{bashrc: $bashrc, hyprland: $hyprland, menu: $menu,
-    installed: ($bashrc and $hyprland and $menu)}'
+  for t in "${targets[@]}"; do
+    has_block "$t" || all=false
+    files+=("$(display_path "$(target_file "$t")")" "$(target_what "$t")")
+  done
+  jq -n -c "${args[@]}" --argjson installed "$all" --argjson files "$(json_groups 2 "${files[@]}")" \
+    '{bashrc: $bashrc, zshrc: $zshrc, fish: $fish, hyprland: $hyprland, menu: $menu,
+      installed: $installed, files: [$files[] | {file: .[0], what: .[1]}]}'
 }
 
 where_text() {
   case $1 in
-    bashrc) echo "at the end" ;;
-    hyprland) echo "at the end" ;;
+    bashrc | zshrc | hyprland) echo "at the end" ;;
+    fish) echo "its own file" ;;
     menu) echo "at the top; shows up in the menu under Style" ;;
   esac
 }
@@ -649,7 +702,7 @@ integration_preview() {
 }
 
 # The real file behind a path, so a symlinked ~/.bashrc (stow, chezmoi) stays a symlink.
-real_file() { readlink -f -- "$1"; }
+real_file() { readlink -m -- "$1"; }
 
 backup_file() {
   local name=$1 file=$2
@@ -742,13 +795,14 @@ write_with_block() {
 
 integration_uninstall() {
   local t path file stripped
-  for t in "${targets[@]}"; do
+  for t in "${all_targets[@]}"; do
     path=$(target_file "$t")
-    file=$(real_file "$path")
     if ! has_block "$t"; then
-      printf '  nothing to remove in %s\n' "$(display_path "$path")"
+      # Quiet about shells this system does not use.
+      [[ " ${targets[*]} " != *" $t "* ]] || printf '  nothing to remove in %s\n' "$(display_path "$path")"
       continue
     fi
+    file=$(real_file "$path")
     backup_file "$t" "$file"
     stripped=$(mktemp "$backup_dir/.stripped.XXXXXX")
     strip_block "$file" "$(begin_marker "$t")" "$(end_marker "$t")" > "$stripped"

@@ -59,6 +59,44 @@ fails "unknown option refused" "$helper" integration install --yes --force
 ok "keep Omarchy's keys" "$helper" integration install --yes --replace-group-keys no
 eq "choice changed" "false" "$("$helper" state | jq '.replaceGroupKeys')"
 
+echo "integration: zsh and fish"
+# Stand-ins for the shells, so the helper sees them installed.
+shells_bin=$(mktemp -d)
+homes+=("$shells_bin")
+printf '#!/bin/sh\nexit 0\n' > "$shells_bin/zsh"
+cp "$shells_bin/zsh" "$shells_bin/fish"
+chmod +x "$shells_bin"/*
+with_shells() { PATH="$shells_bin:$PATH" "$@"; }
+
+omarchy_home
+printf '# my zshrc\n' > "$HOME/.zshrc"
+mkdir -p "$HOME/.config/fish/conf.d"
+if ! command -v zsh > /dev/null && ! command -v fish > /dev/null; then
+  eq "a config without the shell is not enough (uv makes both)" \
+    '["~/.bashrc","~/.config/hypr/hyprland.lua","~/.config/omarchy/extensions/omarchy-menu.jsonc"]' \
+    "$("$helper" state | jq -c '[.integration.files[].file]')"
+fi
+before=$(snapshot; cat "$HOME/.zshrc"; find "$HOME/.config/fish" -type f)
+eq "zsh and fish users need them too" "false" "$(with_shells "$helper" state | jq '.integration.installed')"
+eq "the panel lists them" '["~/.bashrc","~/.zshrc","~/.config/fish/conf.d/colorful-terminals.fish","~/.config/hypr/hyprland.lua","~/.config/omarchy/extensions/omarchy-menu.jsonc"]' \
+  "$(with_shells "$helper" state | jq -c '[.integration.files[].file]')"
+ok "install for zsh and fish" with_shells "$helper" integration install --yes
+eq "one block in ~/.zshrc, after its lines" "# my zshrc|# BEGIN colorful-terminals" "$(head -n 2 "$HOME/.zshrc" | cut -c1-26 | paste -sd '|')"
+fishfile="$HOME/.config/fish/conf.d/colorful-terminals.fish"
+ok "fish gets its own file" test -f "$fishfile"
+eq "fish block sources the fish hook" '1' "$(grep -c "source '.*/shell/colorful-terminals.fish'; end" "$fishfile")"
+eq "state says installed" "true" "$(with_shells "$helper" state | jq '.integration.installed')"
+zsh=${CT_ZSH:-$(command -v zsh || true)}
+fish=${CT_FISH:-$(command -v fish || true)}
+if [[ -n $zsh ]]; then ok "zsh block parses" "$zsh" -n "$HOME/.zshrc"; fi
+if [[ -n $fish ]]; then ok "fish block parses" "$fish" -n "$fishfile"; fi
+ok "uninstall, even with the shells gone" "$helper" integration uninstall --yes
+eq "zshrc back, fish file gone" "$before" "$(snapshot; cat "$HOME/.zshrc"; find "$HOME/.config/fish" -type f)"
+
+omarchy_home
+SHELL=/usr/bin/zsh with_shells "$helper" integration install --yes > /dev/null
+ok "zsh as the login shell gets a ~/.zshrc" grep -q 'BEGIN colorful-terminals' "$HOME/.zshrc"
+
 echo "integration: unusual files"
 omarchy_home
 printf 'alias ll="ls -l"' > "$(bashrc)"   # no final newline

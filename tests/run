@@ -19,6 +19,7 @@ if have shellcheck; then
 fi
 run config bash tests/config.test.sh
 run integration bash tests/integration.test.sh
+run hooks bash tests/hooks.test.sh
 if have lua; then
   home=$(mktemp -d)
   run keys env HOME="$home" lua tests/keys.test.lua "$PWD"
