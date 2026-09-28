@@ -93,6 +93,20 @@ case ${1-} in
     grim -g "$((x + w - 30)),$((y + h - 30)) 1x1" -t ppm - | tail -c 3 | od -An -tu1 | xargs
     ;;
 
+  active-pixel)   # prints "r g b" of the same spot in the focused window
+    read -r x y w h < <(hyprctl activewindow -j | jq -r '"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+    grim -g "$((x + w - 30)),$((y + h - 30)) 1x1" -t ppm - | tail -c 3 | od -An -tu1 | xargs
+    ;;
+
+  active-class)
+    hyprctl activewindow -j | jq -r .class
+    ;;
+
+  color-keys-bound)
+    check "Super+Ctrl+Alt+Shift+1…8 and +0 are bound" bash -c "[[ \$(hyprctl binds | grep -c 'description: Terminal color') == 9 ]]"
+    check "on Super+Ctrl+Alt+Shift (modmask 77)" bash -c "hyprctl binds | grep -B4 'description: Terminal color 1' | grep -q 'modmask: 77'"
+    ;;
+
   theme-background)   # prints "r g b" of the theme's terminal background
     hex=$(grep -m1 -E '^background\s*=' "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml" | grep -oE '#[0-9a-fA-F]{6}')
     printf '%d %d %d\n' "0x${hex:1:2}" "0x${hex:3:2}" "0x${hex:5:2}"
@@ -146,7 +160,7 @@ case ${1-} in
     ;;
 
   *)
-    echo "usage: guest session-ready|add|panel <name>|turn-on|project-windows|window-pixel|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
+    echo "usage: guest session-ready|add|panel <name>|turn-on|project-windows|window-pixel|active-pixel|active-class|color-keys-bound|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
     exit 2
     ;;
 esac
