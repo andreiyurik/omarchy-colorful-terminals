@@ -115,6 +115,8 @@ function hints(ctx) {
   if (c.target === "project") {
     if (c.missing) out.push(["Del", "remove"])
     else out.push(["←→", "color"], ["Enter", "open"])
+  } else if (c.target === "paint") {
+    return [["←→", "key"], ["Shift+←→", "color"], ["C", "custom"]]
   } else if (c.target === "install") {
     out.push(["Enter", "turn on"])
   }
@@ -217,13 +219,14 @@ function suggestions(query, currentDir, repos, dirs, projects) {
   return rows
 }
 
-// Digits in use by projects that another binding also claims.
+// Keys of ours that another binding also claims: project digits in use, and
+// every color key (Shift), since those are always bound.
 function conflictsFor(conflicts, projectCount) {
   var out = []
   var limit = Math.min(projectCount, MAX_KEYS)
   for (var i = 0; i < (conflicts || []).length; i++) {
     var c = conflicts[i]
-    if (c.digit >= 1 && c.digit <= limit) out.push(c)
+    if (c.shift ? c.digit >= 0 && c.digit <= 8 : c.digit >= 1 && c.digit <= limit) out.push(c)
   }
   return out
 }

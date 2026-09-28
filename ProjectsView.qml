@@ -46,6 +46,8 @@ FocusScope {
   // True from a change until the fresh state is back, so a fast second key
   // press cannot act on an old list (and move the wrong project).
   property bool busy: false
+  property int paintSlot: 1             // the color key under the cursor, 1–8
+  property var paintLocal: ({})         // colors just picked, until the state catches up
 
   readonly property var projects: (config && config.projects) || []
   readonly property bool lightTheme: Model.isLightTheme(String(themeBackground))
@@ -57,12 +59,22 @@ FocusScope {
       if (Model.colorIssue(projects[i].color, String(themeText), String(themeBackground))) return true
     return false
   }
+  // The colors on Super+Ctrl+Alt+Shift+1…8: your own, or else the palette's.
+  readonly property var paintColors: {
+    var own = (config && config.paint) || {}
+    var out = []
+    for (var n = 1; n <= 8; n++) {
+      var c = paintLocal[n] !== undefined ? paintLocal[n] : own[n]
+      out.push(Model.hexOf(c) || (palette[n - 1] ? Model.hexOf(palette[n - 1].color) : ""))
+    }
+    return out
+  }
   readonly property bool empty: loaded && projects.length === 0
   readonly property bool installed: !!(config && config.integration && config.integration.installed)
   readonly property bool adding: mode === "add" || empty
   readonly property bool needsSetup: loaded && !installed && projects.length > 0
-  // Super+Ctrl+Alt+digit keys that something else also uses. Omarchy leaves
-  // them free, so this is the user's own config.
+  // Super+Ctrl+Alt(+Shift)+digit keys that something else also uses. Omarchy
+  // leaves them free, so this is the user's own config.
   readonly property var conflicts: Model.conflictsFor(scan.conflicts, projects.length)
   readonly property var rows: Model.suggestions(query, scan.currentDir, scan.repos, dirs, projects)
 
@@ -71,6 +83,7 @@ FocusScope {
     var t = []
     for (var i = 0; i < projects.length; i++) t.push("project")
     t.push("add")
+    t.push("paint")
     if (needsSetup) t.push("install")
     return t
   }
@@ -133,6 +146,7 @@ FocusScope {
   // and the cursor is placed once everything has settled.
   function configUpdated() {
     syncRows((config && config.projects) || [])
+    paintLocal = ({})
     Qt.callLater(placeCursor)
   }
   onConfigChanged: configUpdated()
@@ -197,6 +211,34 @@ FocusScope {
     setColor(current.n, Model.stepColor(palette, rowModel.get(selected).tint, step))
   }
 
+  function pickPaintSlot(n) {
+    if (mode === "hex") cancelMode()
+    paintSlot = n
+    selected = targets.indexOf("paint")
+    keyCatcher.forceActiveFocus()
+  }
+
+  // Picking the palette's own color for a key puts it back to the default,
+  // so it follows the theme between dark and light.
+  function setPaintColor(n, color) {
+    var c = Model.hexOf(color)
+    if (!c) { error = "Colors look like #1a3a5a"; return }
+    var standard = palette[n - 1] ? Model.hexOf(palette[n - 1].color) : ""
+    var local = Object.assign({}, paintLocal)
+    local[n] = c
+    paintLocal = local
+    request(["paint-color", String(n), c === standard ? "default" : c])
+  }
+
+  function stepPaint(step) {
+    setPaintColor(paintSlot, Model.stepColor(palette, paintColors[paintSlot - 1], step))
+  }
+
+  function defaultPaint() {
+    var standard = palette[paintSlot - 1] ? Model.hexOf(palette[paintSlot - 1].color) : ""
+    if (standard && paintColors[paintSlot - 1] !== standard) setPaintColor(paintSlot, standard)
+  }
+
   function move(step) {
     if (!current) return
     var to = selected + step
@@ -251,6 +293,11 @@ FocusScope {
   }
 
   function startHex() {
+    if (target === "paint") {
+      hexPreview = paintColors[paintSlot - 1]
+      mode = "hex"
+      return
+    }
     if (!current || !current.exists) return
     hexPreview = Model.hexOf(current.color)
     mode = "hex"
@@ -259,7 +306,8 @@ FocusScope {
   function applyHex(value) {
     var c = Model.hexOf(value)
     if (!c) { error = "Type a color like #1a3a5a"; return }
-    setColor(current.n, c)
+    if (target === "paint") setPaintColor(paintSlot, c)
+    else setColor(current.n, c)
     mode = "list"
     hexPreview = ""
     keyCatcher.forceActiveFocus()
@@ -301,6 +349,18 @@ FocusScope {
     var ctrl = event.modifiers & Qt.ControlModifier
     var changes = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Delete
       || event.key === Qt.Key_Backspace || ((event.key === Qt.Key_Up || event.key === Qt.Key_Down) && shift)
+    // On the color keys, ←→ go from key to key and Shift+←→ change its color.
+    if (target === "paint") {
+      pointerGate.reset()
+      if (busy && (shift || event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)) return true
+      if (event.key === Qt.Key_Left && shift) { stepPaint(-1); return true }
+      if (event.key === Qt.Key_Right && shift) { stepPaint(1); return true }
+      if (event.key === Qt.Key_Left) { paintSlot = Math.max(1, paintSlot - 1); return true }
+      if (event.key === Qt.Key_Right) { paintSlot = Math.min(8, paintSlot + 1); return true }
+      if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) { defaultPaint(); return true }
+      if (event.key >= Qt.Key_1 && event.key <= Qt.Key_8 && !ctrl) { paintSlot = event.key - Qt.Key_0; return true }
+    }
+
     if (busy && changes) return true
     pointerGate.reset()
 
@@ -436,7 +496,10 @@ FocusScope {
           var first = problems[0]
           return "Skipped " + problems.length + (problems.length === 1 ? " line" : " lines") + " in "
             + Model.plain(projectsView.config.file || "projects.conf", 80) + ". Line " + first.line + ": “"
-            + Model.plain(first.text, 50) + "”. A project line is a folder and a color, like ~/code/shop #1a3a5a."
+            + Model.plain(first.text, 50) + "”. "
+            + (/^paint-/.test(String(first.text))
+              ? "A color key line is a key from 1 to 8 and a color, like paint-3 = #681e1e."
+              : "A project line is a folder and a color, like ~/code/shop #1a3a5a.")
         }
         color: projectsView.urgent
         font.family: projectsView.fontFamily
@@ -451,7 +514,7 @@ FocusScope {
           var c = projectsView.conflicts[0]
           if (!c) return ""
           var more = projectsView.conflicts.length > 1 ? " (and " + (projectsView.conflicts.length - 1) + " more)" : ""
-          return "Super+Ctrl+Alt+" + c.digit + " also runs “" + Model.plain(c.description, 60) + "”" + more
+          return (c.shift ? "Super+Ctrl+Alt+Shift+" : "Super+Ctrl+Alt+") + c.digit + " also runs “" + Model.plain(c.description, 60) + "”" + more
             + " from your Hyprland config. Both happen when you press it."
         }
         color: projectsView.dim
@@ -554,6 +617,20 @@ FocusScope {
             onClicked: projectsView.startAdd()
           }
         }
+      }
+    }
+
+    // Color keys for any terminal
+    Column {
+      visible: !projectsView.adding
+      width: parent.width
+      spacing: Style.space(12)
+
+      PanelSeparator { foreground: projectsView.text }
+      PaintKeys {
+        id: paintKeys
+        width: parent.width
+        view: projectsView
       }
     }
 
