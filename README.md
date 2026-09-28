@@ -6,12 +6,13 @@
 
 Give every project its own terminal color, so you always know which project a terminal belongs to.
 
-An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, and `Super+Ctrl+Alt+1…9` hotkeys that open a project or jump to its window.
+An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, `Super+Ctrl+Alt+1…9` hotkeys that open a project or jump to its window, and `Super+Ctrl+Alt+Shift+1…8` to give any terminal a color of its own.
 
 ![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
 
 - **Automatic.** `cd` into a project and the background turns its color. Leave it and the theme color comes back. Subfolders keep the project color; a project inside another project keeps its own.
 - **Project keys.** `Super+Ctrl+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
+- **Any terminal.** `Super+Ctrl+Alt+Shift+1…8` colors the terminal you are in, project or not; `Super+Ctrl+Alt+Shift+0` takes the color away. The panel shows the eight colors, and you can change each one.
 - **One small panel.** Add folders, pick colors, and reorder, with the keyboard or the mouse. Every change is saved as you make it.
 
 It keys off the folder, not the way the terminal was opened, so it works with any project launcher (Project Launcher, Tableau, a tmux sessionizer, or plain `cd`).
@@ -38,6 +39,10 @@ To update: `omarchy plugin update andreiyurik.colorful-terminals`, then `omarchy
 |---|---|
 | `Super+Ctrl+Alt+1` … `Super+Ctrl+Alt+9` | Open project N, or jump to its open window |
 | `Super+Ctrl+Alt+0` | Open the settings panel |
+| `Super+Ctrl+Alt+Shift+1` … `Super+Ctrl+Alt+Shift+8` | Give the terminal you are in color 1…8 |
+| `Super+Ctrl+Alt+Shift+0` | Take that color away: back to the project or theme color |
+
+A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when you `cd` into a project and goes away with `Super+Ctrl+Alt+Shift+0` or when the terminal closes. It is always the terminal you are in, even when one terminal program draws all your windows, because the shell in that terminal does the coloring: Hyprland passes the key to the focused window. So it works at a shell prompt; if a program is running there, a notification says so and nothing changes.
 
 In the panel:
 
@@ -52,6 +57,8 @@ In the panel:
 | `A` | Add a project (`Tab` completes a path) |
 | `Ctrl+U` | Turn off, after asking |
 | `Esc` | Close |
+
+On the **Any terminal** row: `←` `→` go from key to key, `Shift+←` `Shift+→` change that key's color, `C` types a custom one, and `Del` puts it back to the palette color. A click on a tile does the same.
 
 The bottom of the panel shows the few keys that matter for what is selected, and the buttons show theirs on hover. Everything also works with the mouse. Letter keys go by position, so they work on any keyboard layout, and the folder field understands a path typed on a Russian layout (`Ё.` is `~/`).
 
@@ -70,6 +77,14 @@ while it is open, and new prompts use them right away.
 
 The first project line opens with `Super+Ctrl+Alt+1`, the second with `Super+Ctrl+Alt+2`, and so on. You can have more than nine projects: the rest get colors but no key. A `replace-group-keys` line from versions before 0.5 does nothing now and can be deleted.
 
+Colors you change for the `Super+Ctrl+Alt+Shift` keys are kept in the same file, one line per key:
+
+```
+paint-3 = #5a1a3a
+```
+
+A key without a line uses the palette color in its place, dark or light to match your theme.
+
 ## What it changes
 
 The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-terminals/`. To work, it adds one marked block to each of these files, and only after you choose **Turn on** in the panel:
@@ -79,12 +94,12 @@ The plugin itself only lives in `~/.config/omarchy/plugins/andreiyurik.colorful-
 | `~/.bashrc` | Sources the hook that sets the terminal color before each prompt |
 | `~/.zshrc` | The same for zsh, only if zsh is installed and you use it |
 | `~/.config/fish/conf.d/colorful-terminals.fish` | The same for fish, in a file of its own, only if fish is installed and you use it |
-| `~/.config/hypr/hyprland.lua` | Loads the `Super+Ctrl+Alt+0…9` keys |
+| `~/.config/hypr/hyprland.lua` | Loads the `Super+Ctrl+Alt+0…9` and `Super+Ctrl+Alt+Shift+0…8` keys |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Adds **Style › Colorful Terminals** to the Omarchy menu |
 
 Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink.
 
-The keys are `Super+Ctrl+Alt` because every other `Super`+digit combination is Omarchy's: workspaces, moving windows, bar panels, and group tabs on `Super+Alt`. So the plugin never takes a key of Omarchy's. If you bind something of your own to a `Super+Ctrl+Alt`+digit, the panel says so. Nothing needs sudo, nothing goes over the network, and nothing is collected.
+The keys are `Super+Ctrl+Alt` because every other `Super`+digit combination is Omarchy's: workspaces, moving windows, bar panels, and group tabs on `Super+Alt`. So the plugin never takes a key of Omarchy's. If you bind something of your own to a `Super+Ctrl+Alt`+digit or `Super+Ctrl+Alt+Shift`+digit, the panel says so. Nothing needs sudo, nothing goes over the network, and nothing is collected.
 
 ## Remove
 
@@ -107,6 +122,7 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 - **The color changes at the next prompt.** It switches when a command finishes and the shell draws its prompt, not in the middle of a running script.
 - **bash, zsh and fish**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Inside tmux the tmux pane takes the color instead. Not inside zellij.
 - **Terminals opened before you turn it on** get colors once you open them again; their shell has not loaded the hook yet.
+- **The `Super+Ctrl+Alt+Shift` keys work at a shell prompt.** While a program runs in the terminal (an editor, `btop`, `ssh`), the shell cannot answer, so the color stays and a notification says why.
 - **Light themes get a light palette.** Colors picked on a dark theme are marked on a light one, so you can pick a light color instead.
 - A program that paints its own background, such as a full-screen editor theme, covers the color while it runs.
 - Folder names containing ` # ` (space, hash, space) or line breaks are not supported.
