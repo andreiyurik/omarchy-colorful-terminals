@@ -4,11 +4,16 @@
 # should change, sends OSC 11 (set background) or OSC 111 (back to the theme).
 # Inside tmux it colors the tmux pane instead.
 #
+# Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own (see
+# the bash hook): Hyprland presses Ctrl+Alt+Shift+F12, which runs _ct_key.
+#
 # It reads projects.conf by the same rules as lib/config.bash (tests/hooks.test.sh
 # checks they agree), in plain zsh: no forks, no modules.
 
 typeset -g _ct_file="$HOME/.config/colorful-terminals/projects.conf"
 typeset -g _ct_shown=${_ct_shown-}
+typeset -g _ct_paint=${_ct_paint-}
+typeset -g _ct_request=${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/colorful-terminals/paint}
 
 # Sets REPLY to the color for folder $1: the project with the longest matching
 # path wins. "" means no project here.
@@ -24,7 +29,7 @@ _ct_color_for() {
     line=${line##[[:space:]]#}
     line=${line%%[[:space:]]#}
     [[ -z $line || $line == \#* ]] && continue
-    [[ $line == [a-z][a-z-]#[[:space:]]#=* ]] && continue
+    [[ $line == [a-z][a-z0-9-]#[[:space:]]#=* ]] && continue
     [[ $line == (\~|/)* ]] || continue
 
     # A comment starts at the first "#" with a space before it and a space
@@ -82,13 +87,31 @@ _ct_apply() {
   fi
 }
 
+# Shows this terminal's own color, or else the project color for $PWD.
 _ct_precmd() {
-  local REPLY
-  _ct_color_for "$PWD"
+  local REPLY=$_ct_paint
+  [[ -n $REPLY ]] || _ct_color_for "$PWD"
   if [[ $REPLY != "$_ct_shown" ]]; then
     _ct_apply "$REPLY"
     _ct_shown=$REPLY
   fi
+}
+
+# Takes the color the helper left and empties the file, which tells the
+# helper this terminal got it.
+_ct_key() {
+  local color
+  [[ -n $_ct_request && -r $_ct_request ]] || return 0
+  color=$(<$_ct_request)
+  : >| $_ct_request
+  if [[ $color == reset ]]; then
+    _ct_paint=""
+  elif [[ $color == \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f] ]]; then
+    _ct_paint=$color
+  else
+    return 0
+  fi
+  _ct_precmd
 }
 
 # Only for interactive shells that draw on a real terminal.
@@ -97,3 +120,9 @@ _ct_precmd() {
 # add-zsh-hook keeps one copy, so sourcing ~/.zshrc again adds nothing.
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _ct_precmd
+
+# Ctrl+Alt+Shift+F12, in every keymap.
+zle -N _ct_key
+bindkey -M emacs '\e[24;8~' _ct_key
+bindkey -M viins '\e[24;8~' _ct_key
+bindkey -M vicmd '\e[24;8~' _ct_key

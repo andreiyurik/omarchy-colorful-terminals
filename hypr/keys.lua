@@ -2,6 +2,8 @@
 --
 --   Super+Ctrl+Alt+1…9  open project N in a terminal, or jump to its open window
 --   Super+Ctrl+Alt+0    open the Colorful Terminals settings panel
+--   Super+Ctrl+Alt+Shift+1…8  give the focused terminal color 1…8
+--   Super+Ctrl+Alt+Shift+0    take that color away again
 --
 -- Super+Ctrl+Alt because every other Super+digit combination is Omarchy's:
 -- workspaces, moving windows, bar panels, and group tabs on Super+Alt.
@@ -23,7 +25,7 @@ function M.parse_line(line)
   line = trim(line)
   if line == "" or line:sub(1, 1) == "#" then return "blank" end
 
-  local key, value = line:match("^([a-z][a-z%-]*)%s*=%s*(.-)$")
+  local key, value = line:match("^([a-z][a-z0-9%-]*)%s*=%s*(.-)$")
   if key then return "setting", key, value end
 
   local first = line:sub(1, 1)
@@ -71,6 +73,14 @@ function M.setup(dir)
 
   o.bind("SUPER + CTRL + ALT + code:19", "Colorful Terminals settings",
     "omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'")
+
+  -- The helper finds out whether a terminal is focused and hands it the color
+  -- (see `colorful-terminals paint`); the colors are set in the panel.
+  for n = 1, 8 do
+    o.bind("SUPER + CTRL + ALT + SHIFT + code:" .. tostring(n + 9), "Terminal color " .. n,
+      helper .. " paint " .. n)
+  end
+  o.bind("SUPER + CTRL + ALT + SHIFT + code:19", "Terminal color off", helper .. " paint 0")
 end
 
 return function(dir)
