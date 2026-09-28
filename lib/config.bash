@@ -6,7 +6,7 @@
 # File format, one entry per line:
 #   ~/code/shop        #243453      project folder, then its color
 #   ~/code/blog  #23402f  # note    anything after " # " is a comment
-#   some-setting = value            a setting (none are in use today)
+#   paint-3 = #681e1e               a setting: the color on Super+Ctrl+Alt+Shift+3
 #   # comment                       ignored
 # The Nth project line opens with Super+Ctrl+Alt+N.
 
@@ -20,7 +20,7 @@ _ct_parse_line() {
   line=${line%"${line##*[![:space:]]}"}
   [[ -z $line || $line == \#* ]] && return 0
 
-  if [[ $line =~ ^([a-z][a-z-]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+  if [[ $line =~ ^([a-z][a-z0-9-]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
     _ct_kind=setting _ct_key=${BASH_REMATCH[1]} _ct_value=${BASH_REMATCH[2]}
     return 0
   fi

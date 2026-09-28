@@ -4,11 +4,18 @@
 # against ~/.config/colorful-terminals/projects.conf and, only when the color
 # should change, sends OSC 11 (set background) or OSC 111 (back to the theme).
 # Inside tmux it colors the tmux pane instead, which tmux keeps per pane.
+#
+# Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own, which
+# wins over project colors until Super+Ctrl+Alt+Shift+0 or the shell exits:
+# the helper leaves the color in $_ct_request and Hyprland presses
+# Ctrl+Alt+Shift+F12 in the focused terminal, which runs _ct_key here.
 
 # shellcheck source=lib/config.bash
 source "${BASH_SOURCE[0]%/*}/../lib/config.bash" || return 0
 
 _ct_shown=${_ct_shown-}   # color on screen now; "" = theme color
+_ct_paint=${_ct_paint-}   # this terminal's own color; "" = by project
+_ct_request=${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/colorful-terminals/paint}
 
 # Shows <color>, or the theme color for "".
 _ct_apply() {
@@ -28,15 +35,41 @@ _ct_apply() {
   fi
 }
 
+# Shows this terminal's own color, or else the project color for $PWD.
+_ct_show() {
+  local want=$_ct_paint
+  if [[ -z $want ]]; then
+    _ct_load
+    _ct_match_dir "$PWD"
+    want=$_ct_match
+  fi
+  if [[ $want != "$_ct_shown" ]]; then
+    _ct_apply "$want"
+    _ct_shown=$want
+  fi
+}
+
 _ct_prompt() {
   local status=$?
-  _ct_load
-  _ct_match_dir "$PWD"
-  if [[ $_ct_match != "$_ct_shown" ]]; then
-    _ct_apply "$_ct_match"
-    _ct_shown=$_ct_match
-  fi
+  _ct_show
   return "$status"
+}
+
+# Takes the color the helper left and empties the file, which tells the
+# helper this terminal got it.
+_ct_key() {
+  local color=""
+  [[ -n $_ct_request && -r $_ct_request ]] || return 0
+  IFS= read -r color < "$_ct_request"
+  : >| "$_ct_request"
+  if [[ $color == reset ]]; then
+    _ct_paint=""
+  elif [[ $color =~ ^#[0-9a-fA-F]{6}$ ]]; then
+    _ct_paint=$color
+  else
+    return 0
+  fi
+  _ct_show
 }
 
 # Only for interactive shells that draw on a real terminal.
@@ -46,3 +79,9 @@ _ct_prompt() {
 if [[ " ${PROMPT_COMMAND[*]} " != *_ct_prompt* ]]; then
   PROMPT_COMMAND="_ct_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 fi
+
+# Ctrl+Alt+Shift+F12, in every keymap.
+for _ct_keymap in emacs vi-insert vi-command; do
+  bind -m "$_ct_keymap" -x '"\e[24;8~": _ct_key' 2> /dev/null
+done
+unset _ct_keymap
