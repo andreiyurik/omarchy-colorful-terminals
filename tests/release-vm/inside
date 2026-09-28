@@ -299,7 +299,10 @@ press meta_l-ctrl-alt-shift-0
 sleep 2
 pixel=$(guest window-pixel)
 if nearer "$pixel" "$theme" "$red"; then ok "Super+Ctrl+Alt+Shift+0 takes it away ($pixel)"; else not_ok "Super+Ctrl+Alt+Shift+0 takes it away (got $pixel)"; fi
-type_text "cd ~/work/demo"
+type_text "cd"
+press ret
+sleep 1
+type_text "cd work/demo"
 press ret
 sleep 2
 pixel=$(guest window-pixel)
