@@ -280,6 +280,47 @@ project="26 58 90"
 theme=$(guest theme-background)
 pixel=$(guest window-pixel)
 if nearer "$pixel" "$project" "$theme"; then ok "the terminal has the project color ($pixel)"; else not_ok "the terminal has the project color (got $pixel, theme $theme)"; fi
+
+log "Super+Ctrl+Alt+Shift+digit colors the terminal you are in"
+guest color-keys-bound | result
+red="104 30 30"
+plum="98 29 75"
+press meta_l-ctrl-alt-shift-3
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$red" "$project"; then ok "Super+Ctrl+Alt+Shift+3 turns the project terminal red ($pixel)"; else not_ok "Super+Ctrl+Alt+Shift+3 turns the project terminal red (got $pixel)"; fi
+guest shot 04a-color-key
+type_text "cd /"
+press ret
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$red" "$theme"; then ok "the color stays after cd ($pixel)"; else not_ok "the color stays after cd (got $pixel)"; fi
+press meta_l-ctrl-alt-shift-0
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$theme" "$red"; then ok "Super+Ctrl+Alt+Shift+0 takes it away ($pixel)"; else not_ok "Super+Ctrl+Alt+Shift+0 takes it away (got $pixel)"; fi
+type_text "cd ~/work/demo"
+press ret
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$project" "$red"; then ok "and the project color is back in the project ($pixel)"; else not_ok "and the project color is back in the project (got $pixel)"; fi
+
+# A second terminal in the same folder (Super+Return opens one there): the key
+# colors only the focused one, even when one Ghostty draws both.
+press meta_l-ret
+for ((i = 0; i < 20; i++)); do [[ $(guest active-class) == com.mitchellh.ghostty ]] && break; sleep 0.5; done
+sleep 3
+press meta_l-ctrl-alt-shift-5
+sleep 2
+guest shot 04b-two-terminals
+pixel=$(guest active-pixel)
+if nearer "$pixel" "$plum" "$project"; then ok "Super+Ctrl+Alt+Shift+5 colors the focused terminal ($pixel)"; else not_ok "Super+Ctrl+Alt+Shift+5 colors the focused terminal (got $pixel)"; fi
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$project" "$plum"; then ok "and not the other one ($pixel)"; else not_ok "and not the other one (got $pixel)"; fi
+press meta_l-w
+sleep 2
+for ((i = 0; i < 10; i++)); do [[ $(guest active-class) == org.omarchy.project_demo ]] && break; press meta_l-ctrl-alt-1; sleep 1; done
+
 type_text "cd /"
 press ret
 sleep 2
