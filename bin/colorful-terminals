@@ -17,6 +17,7 @@ source "$plugin_dir/lib/config.bash"
 config_dir=${_ct_file%/*}
 backup_dir="$config_dir/backup"
 max_keys=9
+paint_keys=8   # Super+Ctrl+Alt+Shift+1…8 color the focused terminal
 
 # Eight hues around the color wheel at the same low brightness: far enough apart
 # to tell at a glance, dark enough for light text on every dark Omarchy theme.
@@ -38,6 +39,11 @@ Projects (stored in ${_ct_file/#"$HOME"/\~}):
   move <n> up|down         Move project n, which changes its Super+Ctrl+Alt key
   color <n> <#rrggbb>      Change the color of project n
   open <n>                 Open project n in a terminal, or focus its window
+
+Any terminal (Super+Ctrl+Alt+Shift+1…8 give the focused terminal a color, 0 takes it away):
+  paint <1-8|0>            What those keys run
+  paint-color <n> <#rrggbb>|default
+                           Change the color on Super+Ctrl+Alt+Shift+n
 
 Integration (shell hooks for bash, zsh and fish, Hyprland keys, Omarchy menu entry):
   integration status       Show what is installed
@@ -152,16 +158,22 @@ free_color() {
 
 cmd_list() {
   _ct_load
+  local i key
   if ((${#_ct_paths[@]} == 0)); then
     echo "No projects yet. Add one with: colorful-terminals add <folder>"
-    return
   fi
-  local i key
   for i in "${!_ct_paths[@]}"; do
     key="Super+Ctrl+Alt+$((i + 1))"
     ((i < max_keys)) || key="(no key)"
     printf '%-2s %-17s %s  %s\n' "$((i + 1))" "$key" "${_ct_colors[i]}" "$(display_path "${_ct_paths[i]}")"
   done
+  echo
+  echo "Any terminal:"
+  read_config
+  for ((i = 1; i <= paint_keys; i++)); do
+    printf '   %-23s %s  %s\n' "Super+Ctrl+Alt+Shift+$i" "$(paint_color "$i")" "$(paint_name "$i")"
+  done
+  printf '   %-23s back to the project or theme color\n' "Super+Ctrl+Alt+Shift+0"
 }
 
 cmd_add() {
@@ -324,11 +336,177 @@ cmd_open() {
     "uwsm-app -- xdg-terminal-exec --app-id=$app_id --dir=$(printf '%q' "$dir")"
 }
 
+# --------------------------------------------------------------- any terminal
+
+# Omarchy's current theme is light when its background is: the same test as
+# the panel's (Model.isLightTheme).
+theme_is_light() {
+  local file=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml hex
+  [[ -r $file ]] || return 1
+  hex=$(grep -m1 -E '^[[:space:]]*background[[:space:]]*=' "$file" | grep -oE '#[0-9a-fA-F]{6}') || return 1
+  awk -v r=$((16#${hex:1:2})) -v g=$((16#${hex:3:2})) -v b=$((16#${hex:5:2})) '
+    function ch(x) { x = x / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ^ 2.4 }
+    BEGIN { exit !(0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b) > 0.35) }'
+}
+
+# The paint-<n> setting in lines[] (read_config first), or "".
+paint_setting() {
+  local line
+  paint_setting_at=-1
+  for line in "${!lines[@]}"; do
+    _ct_parse_line "${lines[line]}"
+    if [[ $_ct_kind == setting && $_ct_key == "paint-$1" ]]; then paint_setting_at=$line; fi
+  done
+  ((paint_setting_at >= 0)) || return 0
+  _ct_parse_line "${lines[paint_setting_at]}"
+  printf '%s' "${_ct_value,,}"
+}
+
+# The color on Super+Ctrl+Alt+Shift+<n>: the setting, or else the nth palette
+# color for the current theme.
+paint_color() {
+  local color
+  color=$(paint_setting "$1")
+  if valid_color "$color"; then
+    printf '%s' "$color"
+  elif theme_is_light; then
+    printf '%s' "${light_colors[$1 - 1]}"
+  else
+    printf '%s' "${palette_colors[$1 - 1]}"
+  fi
+}
+
+paint_name() {
+  local color i
+  color=$(paint_color "$1")
+  for i in "${!palette_colors[@]}"; do
+    [[ ${palette_colors[i]} != "$color" ]] || { printf '%s' "${palette_names[i]}"; return; }
+    [[ ${light_colors[i]} != "$color" ]] || { printf '%s' "${light_names[i]}"; return; }
+  done
+  printf 'your color'
+}
+
+cmd_paint_color() {
+  (($# == 2)) || die "usage: colorful-terminals paint-color <1-$paint_keys> <#rrggbb>|default"
+  local n=$1 color=${2,,} line
+  if [[ ! $n =~ ^[1-9]$ ]] || ((n > paint_keys)); then die "the color keys go from 1 to $paint_keys, got '$n'"; fi
+  [[ $color == default ]] || valid_color "$color" || die "colors look like #243453, got '$2'"
+  lock_config
+  read_config
+  paint_setting "$n" > /dev/null
+  line=$(printf 'paint-%s = %s' "$n" "$color")
+  if [[ $color == default ]]; then
+    ((paint_setting_at < 0)) || lines=("${lines[@]:0:paint_setting_at}" "${lines[@]:paint_setting_at+1}")
+    drop_paint_header
+  elif ((paint_setting_at >= 0)); then
+    lines[paint_setting_at]=$line
+  else
+    ((${#lines[@]})) || default_header
+    add_paint_setting "$n" "$line"
+  fi
+  write_config
+  reload_hyprland
+  if [[ $color == default ]]; then
+    echo "Super+Ctrl+Alt+Shift+$n is back to $(paint_color "$n")"
+  else
+    echo "Super+Ctrl+Alt+Shift+$n is now $color"
+  fi
+}
+
+paint_header="# Super+Ctrl+Alt+Shift+1…$paint_keys color the terminal you are in; +0 takes the color away."
+
+# Puts a paint-<n> line in order among the others, under a comment that says
+# what they are.
+add_paint_setting() {
+  local n=$1 line=$2 i pos=-1 header=-1
+  for i in "${!lines[@]}"; do
+    [[ ${lines[i]} == "$paint_header" ]] && header=$i
+    _ct_parse_line "${lines[i]}"
+    if [[ $_ct_kind == setting && $_ct_key =~ ^paint-([0-9]+)$ ]]; then
+      if ((BASH_REMATCH[1] < n)); then pos=$((i + 1)); elif ((pos < 0)); then pos=$i; fi
+    fi
+  done
+  if ((pos < 0 && header >= 0)); then pos=$((header + 1)); fi
+  if ((pos < 0)); then
+    # First one: at the end, after a blank line and the comment.
+    [[ ${#lines[@]} -eq 0 || -z ${lines[-1]} ]] || lines+=("")
+    lines+=("$paint_header" "$line")
+    return
+  fi
+  lines=("${lines[@]:0:pos}" "$line" "${lines[@]:pos}")
+}
+
+# Takes the comment away with the last paint-<n> line.
+drop_paint_header() {
+  local i header=-1
+  for i in "${!lines[@]}"; do
+    _ct_parse_line "${lines[i]}"
+    [[ $_ct_kind == setting && $_ct_key == paint-* ]] && return
+    [[ ${lines[i]} == "$paint_header" ]] && header=$i
+  done
+  ((header >= 0)) || return 0
+  lines=("${lines[@]:0:header}" "${lines[@]:header+1}")
+  # And the blank line that was put before it.
+  if ((header > 0 && header == ${#lines[@]})) && [[ -z ${lines[-1]} ]]; then unset 'lines[-1]'; fi
+}
+
+# What Super+Ctrl+Alt+Shift+<n> runs (0 takes the color away). The shell in
+# the focused terminal does the coloring, so it is always that terminal, even
+# when one terminal program draws every window: the color goes into
+# $XDG_RUNTIME_DIR/colorful-terminals/paint, Hyprland presses
+# Ctrl+Alt+Shift+F12 in the focused window, and the shell hook's key binding
+# takes the color and empties the file.
+cmd_paint() {
+  if (($# != 1)) || [[ ! $1 =~ ^[0-9]$ ]] || (($1 > paint_keys)); then die "usage: colorful-terminals paint <1-$paint_keys|0>"; fi
+  local n=$1 color=reset dir request tmp i
+  [[ -n ${XDG_RUNTIME_DIR-} && -d $XDG_RUNTIME_DIR ]] || die "XDG_RUNTIME_DIR is not set"
+  if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE-} ]] || ! command -v hyprctl > /dev/null; then die "this needs Hyprland"; fi
+  if ! focused_is_terminal; then
+    notify "No terminal in focus" "Click a terminal, then press Super+Ctrl+Alt+Shift+$n again."
+    exit 1
+  fi
+  if ((n)); then
+    read_config
+    color=$(paint_color "$n")
+  fi
+
+  dir=$XDG_RUNTIME_DIR/colorful-terminals
+  request=$dir/paint
+  [[ -d $dir ]] || mkdir -m 700 "$dir"
+  tmp=$(mktemp "$dir/.paint.XXXXXX")
+  printf '%s\n' "$color" > "$tmp"
+  mv -f "$tmp" "$request"
+
+  timeout 3 hyprctl eval "$send_key_lua" > /dev/null 2>&1 || true
+  for ((i = 0; i < 40; i++)); do
+    [[ -s $request ]] || break
+    sleep 0.025
+  done
+  if [[ -s $request ]]; then
+    rm -f -- "$request"
+    notify "The terminal kept its color" "Colors change at a shell prompt, in terminals opened after Colorful Terminals was turned on."
+    exit 1
+  fi
+  rm -f -- "$request"
+}
+
+# Ctrl+Alt+Shift+F12, to the focused surface with explicit mods, the way
+# Omarchy's own Super+C sends Ctrl+Insert to terminals (bindings/clipboard.lua):
+# the held Super does not leak in, and the key is released after 50 ms.
+send_key_lua='hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL ALT SHIFT", key = "F12", state = "down" }))
+hl.timer(function() hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL ALT SHIFT", key = "F12", state = "up" })) end, { timeout = 50, type = "oneshot" })'
+
+# Omarchy tags every terminal window "terminal" (default/hypr/apps/terminals.lua).
+focused_is_terminal() {
+  timeout 3 hyprctl activewindow -j 2> /dev/null | head -c 65536 |
+    jq -e '(.tags // []) | map(sub("\\*$"; "")) | index("terminal") != null' > /dev/null 2>&1
+}
+
 # ------------------------------------------------------------- panel queries
 
 cmd_state() {
   read_config
-  local fields=() problems=() i line
+  local fields=() problems=() paint=() i line
   for i in "${!project_lines[@]}"; do
     parse_project $((i + 1))
     fields+=("$_ct_path_text" "$_ct_path" "$_ct_color" "$([[ -d $_ct_path ]] && echo 1 || echo 0)")
@@ -340,7 +518,10 @@ cmd_state() {
     [[ $_ct_kind == problem ]] && problems+=("$((i + 1))" "${line:0:200}")
     # replace-group-keys was a setting when the keys were Super+Alt; an old
     # line is harmless, so it is not reported.
-    if [[ $_ct_kind == setting && $_ct_key != replace-group-keys ]]; then
+    if [[ $_ct_kind == setting && $_ct_key == paint-[1-9] ]] && ((${_ct_key#paint-} <= paint_keys)) &&
+      valid_color "$_ct_value"; then
+      paint+=("${_ct_key#paint-}" "${_ct_value,,}")
+    elif [[ $_ct_kind == setting && $_ct_key != replace-group-keys ]]; then
       problems+=("$((i + 1))" "${line:0:200}")
     fi
   done
@@ -355,6 +536,7 @@ cmd_state() {
     --argjson problems "$(json_groups 2 "${problems[@]}")" \
     --argjson palette "$(json_groups 2 "${palette[@]}")" \
     --argjson light "$(json_groups 2 "${light[@]}")" \
+    --argjson paint "$(json_groups 2 "${paint[@]}")" \
     '{
       file: $file,
       integration: $integration,
@@ -365,7 +547,8 @@ cmd_state() {
       }],
       problems: [$problems[] | {line: (.[0] | tonumber), text: .[1]}],
       palette: [$palette[] | {name: .[0], color: .[1]}],
-      paletteLight: [$light[] | {name: .[0], color: .[1]}]
+      paletteLight: [$light[] | {name: .[0], color: .[1]}],
+      paint: ($paint | map({key: .[0], value: .[1]}) | from_entries)
     }'
 }
 
@@ -409,8 +592,8 @@ find_repos() {
   jq -n -c '$ARGS.positional' --args "${list[@]}"
 }
 
-# Other Super+Ctrl+Alt+digit keys, so the panel can show them instead of silently
-# fighting over them. Reads the text form of `hyprctl binds`: in the JSON form,
+# Other Super+Ctrl+Alt+digit and Super+Ctrl+Alt+Shift+digit keys ("shift"), so
+# the panel can show them instead of silently fighting over them. Reads the text form of `hyprctl binds`: in the JSON form,
 # keys bound by keycode ("SUPER + CTRL + ALT + code:10") have no key at all.
 # Our own keys are recognized by their descriptions (see hypr/keys.lua).
 find_conflicts() {
@@ -425,13 +608,13 @@ find_conflicts() {
 binds_to_conflicts() {
   awk '
     function flush() {
-      if (mods == "76" && submap == "") {
+      if ((mods == "76" || mods == "77") && submap == "") {
         digit = ""; by_code = "false"
         if (key ~ /code:1[0-9]$/) { code = substr(key, length(key) - 1) + 0; digit = (code - 9) % 10; by_code = "true" }
         else if (key ~ /^[0-9]$/) digit = key
-        if (digit != "" && desc !~ /^(Project [1-9]|Colorful Terminals)/) {
+        if (digit != "" && desc !~ /^(Project [1-9]|Colorful Terminals|Terminal color)/) {
           gsub(/[\t\r]/, " ", desc)
-          printf "%s\t%s\t%s\n", digit, by_code, substr(desc, 1, 80)
+          printf "%s\t%s\t%s\t%s\n", digit, by_code, substr(desc, 1, 80), (mods == "77" ? "true" : "false")
         }
       }
       mods = ""; submap = ""; key = ""; desc = ""
@@ -445,8 +628,8 @@ binds_to_conflicts() {
   ' | jq -R -s -c '
     [split("\n")[] | select(length > 0) | split("\t")
      | {digit: (.[0] | tonumber), byCode: (.[1] == "true"),
-        description: (if .[2] == "" then "(no description)" else .[2] end)}]
-    | sort_by(.digit)'
+        description: (if .[2] == "" then "(no description)" else .[2] end), shift: (.[3] == "true")}]
+    | sort_by(.shift, .digit)'
 }
 
 cmd_dirs() {
@@ -510,7 +693,7 @@ target_what() {
     bashrc) printf 'bash: colors terminals as you cd' ;;
     zshrc) printf 'zsh: colors terminals as you cd' ;;
     fish) printf 'fish: colors terminals as you cd' ;;
-    hyprland) printf 'Super+Ctrl+Alt+0–9 keys' ;;
+    hyprland) printf 'Super+Ctrl+Alt keys for projects and colors' ;;
     menu) printf 'Omarchy menu: Style › Colorful Terminals' ;;
   esac
 }
@@ -812,6 +995,8 @@ main() {
     move) cmd_move "$@" ;;
     color) cmd_color "$@" ;;
     open) cmd_open "$@" ;;
+    paint) cmd_paint "$@" ;;
+    paint-color) cmd_paint_color "$@" ;;
     state) cmd_state "$@" ;;
     scan) cmd_scan "$@" ;;
     dirs) cmd_dirs "$@" ;;

@@ -12,7 +12,7 @@ new_home() {
   HOME=$(mktemp -d)
   export HOME
   homes+=("$HOME")
-  unset HYPRLAND_INSTANCE_SIGNATURE XDG_CONFIG_HOME ZDOTDIR TMUX TMUX_PANE
+  unset HYPRLAND_INSTANCE_SIGNATURE XDG_CONFIG_HOME XDG_STATE_HOME XDG_RUNTIME_DIR ZDOTDIR TMUX TMUX_PANE
   export SHELL=/bin/bash
   conf="$HOME/.config/colorful-terminals/projects.conf"
 }
