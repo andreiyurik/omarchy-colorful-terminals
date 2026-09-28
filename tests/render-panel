@@ -13,7 +13,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 ln -s "$shell_dir/Commons" "$work/Commons"
 ln -s "$shell_dir/Ui" "$work/Ui"
-cp ProjectsView.qml ProjectRow.qml Swatch.qml AddProject.qml TurnOn.qml Model.js "$work/"
+cp ./*.qml Model.js "$work/"
 cp tests/render/shell.qml "$work/shell.qml"
 out=${1:-$work/out}
 mkdir -p "$out"

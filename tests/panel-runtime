@@ -11,7 +11,7 @@ work=$(mktemp -d)
 trap '[[ -n ${KEEP-} ]] || rm -rf "$work"' EXIT
 ln -s "$shell_dir/Commons" "$work/Commons"
 ln -s "$shell_dir/Ui" "$work/Ui"
-cp -r Panel.qml PanelSurface.qml ProjectsView.qml ProjectRow.qml Swatch.qml AddProject.qml TurnOn.qml Model.js bin lib "$work/"
+cp -r ./*.qml Model.js bin lib "$work/"
 cp tests/panel/shell.qml "$work/shell.qml"
 home="$work/home"
 mkdir -p "$home/first" "$home/second" "$home/third" "$home/.config/colorful-terminals" "$home/.local/state"

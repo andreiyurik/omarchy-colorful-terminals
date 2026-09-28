@@ -22,14 +22,14 @@ ShellRoot {
   ]
   readonly property var bashFiles: [
     { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
-    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt+0–9 keys" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt keys for projects and colors" },
     { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
   ]
   readonly property var allFiles: [
     { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
     { file: "~/.zshrc", what: "zsh: colors terminals as you cd" },
     { file: "~/.config/fish/conf.d/colorful-terminals.fish", what: "fish: colors terminals as you cd" },
-    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt+0–9 keys" },
+    { file: "~/.config/hypr/hyprland.lua", what: "Super+Ctrl+Alt keys for projects and colors" },
     { file: "~/.config/omarchy/extensions/omarchy-menu.jsonc", what: "Omarchy menu: Style › Colorful Terminals" }
   ]
   function project(n, path, color, exists) {
@@ -69,7 +69,10 @@ ShellRoot {
     { name: "turn-off", confirm: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
     { name: "own-binding", select: 0, config: config(fourProjects.slice(0, 3)), scan: { currentDir: "", repos: [], conflicts: ownBinding } },
     { name: "light", select: 0, light: true, config: config([project(1, "~/code/shop", "#c3d9f7"), project(2, "~/code/blog", "#d4edbf"),
-      project(3, "~/work/api-gateway", "#681e1e")]), scan: noScan }
+      project(3, "~/work/api-gateway", "#681e1e")]), scan: noScan },
+    { name: "paint", paint: 3, config: config(fourProjects.slice(0, 2), { paint: { "3": "#5a1a3a" } }),
+      scan: { currentDir: "", repos: [], conflicts: [{ digit: 5, description: "Screenshot to clipboard", byCode: true, shift: true }] } },
+    { name: "paint-hex", paint: 2, mode: "hex", config: config(fourProjects.slice(0, 2)), scan: noScan }
   ]
 
   FloatingWindow {
@@ -199,6 +202,31 @@ ShellRoot {
     test.check("a new project gets a light color", "add ~/code/new #f7c9c9", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
     test.check("only the dark color is flagged", true, view.colorsNeedWork)
 
+    test.load(test.scenario("paint"))
+    test.check("the color keys are one stop for the cursor", "paint", view.target)
+    test.check("their colors: yours, else the palette's", ["#1a3a5a", "#213f12", "#5a1a3a", "#4c2276"], view.paintColors.slice(0, 4))
+    test.check("a color key of someone else's is named", 1, view.conflicts.length)
+    test.check("right arrow goes to the next key", 4, (key(Qt.Key_Right), view.paintSlot))
+    test.check("and saves nothing", null, key(Qt.Key_Right))
+    view.busy = true
+    test.check("going from key to key works while saving", 6, (key(Qt.Key_Right), view.paintSlot))
+    view.busy = false
+    view.paintSlot = 3
+    test.check("shift+right gives the key the next palette color", "paint-color 3 #1a3a5a", key(Qt.Key_Right, { modifiers: Qt.ShiftModifier }))
+    test.check("shown at once", "#1a3a5a", view.paintColors[2])
+    test.check("the palette's own color for a key is its default", "paint-color 1 default",
+      (view.lastRun = null, view.setPaintColor(1, "#1a3a5a"), view.settled(), view.lastRun))
+    view.paintSlot = 3
+    test.check("delete puts a key back to its default", "paint-color 3 default", key(Qt.Key_Delete))
+    test.check("a digit picks a key here", 7, (key(Qt.Key_7), view.paintSlot))
+    view.paintSlot = 2
+    key(Qt.Key_C, { nativeScanCode: 54 })
+    test.check("C types a custom color for the key", "hex", view.mode)
+    test.check("which is saved to that key", "paint-color 2 #abcdef", (view.lastRun = null, view.applyHex("#ABCDEF"), view.lastRun))
+    view.pickPaintSlot(5)
+    test.check("clicking a tile puts the cursor on it", ["paint", 5], [view.target, view.paintSlot])
+    test.check("up leaves the color keys", "add", (key(Qt.Key_Up), view.target))
+
     test.load(test.scenario("missing"))
     view.selected = 1
     test.check("a missing folder has no color to change", null, key(Qt.Key_Right))
@@ -213,6 +241,7 @@ ShellRoot {
     view.themeText = s.light ? "#4c4f69" : Color.foreground
     view.themeBackground = s.light ? "#eff1f5" : Color.background
     view.undo = null
+    view.settled()
     view.scan = s.scan
     view.preview = s.preview || ""
     view.config = s.config
@@ -223,6 +252,7 @@ ShellRoot {
     if (s.undo) { view.removeSelected(); view.settled(); view.flashText = "" }
     if (s.confirm) view.askTurnOff()
     if (s.mode === "add") { view.startAdd(); view.dirs = s.dirs || [] }
+    if (s.paint) { view.selected = view.targets.indexOf("paint"); view.paintSlot = s.paint }
     if (s.mode === "hex") view.startHex()
     if (s.query) Qt.callLater(function() { view.setQuery(s.query) })
   }
