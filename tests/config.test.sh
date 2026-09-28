@@ -22,6 +22,8 @@ eq "windows line ending" "project|~/a|#444444|" "$(parse $'~/a #444444\r')"
 eq "comment line" "blank|||" "$(parse '# ~/a #111111')"
 eq "empty line" "blank|||" "$(parse '   ')"
 eq "setting" "setting|||" "$(parse 'replace-group-keys = yes')"
+_ct_parse_line 'paint-3 =  #681E1E'
+eq "setting with a digit" "setting|paint-3|#681E1E" "$_ct_kind|$_ct_key|$_ct_value"
 eq "missing color" "problem|||" "$(parse '~/a')"
 eq "color name instead of hex" "problem|||" "$(parse '~/a green')"
 eq "short hex" "problem|||" "$(parse '~/a #fff')"
@@ -75,7 +77,7 @@ ok "folder with spaces" h add '~/My Projects/web app'
 eq "list" "1  Super+Ctrl+Alt+1  #1a3a5a  ~/code/shop
 2  Super+Ctrl+Alt+2  #213f12  ~/code/blog
 3  Super+Ctrl+Alt+3  #abcdef  ~/code/api
-4  Super+Ctrl+Alt+4  #681e1e  ~/My Projects/web app" "$(h list)"
+4  Super+Ctrl+Alt+4  #681e1e  ~/My Projects/web app" "$(h list | head -n 4)"
 
 ok "move 3 up" h move 3 up
 eq "order after move" "~/code/api" "$(h list | sed -n 2p | awk '{print $4}')"
@@ -139,6 +141,9 @@ printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:11\n\
 printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:19\n\tkeycode: 0\n\tdescription: Colorful Terminals settings\n\n'
 printf 'bindd\n\tmodmask: 72\n\tsubmap: \n\tkey: SUPER + ALT + code:10\n\tkeycode: 0\n\tdescription: Switch to group window 1\n\n'
 printf 'bindd\n\tmodmask: 64\n\tsubmap: \n\tkey: SUPER + code:10\n\tkeycode: 0\n\tdescription: Switch to workspace 1\n\n'
+printf 'bindd\n\tmodmask: 77\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + SHIFT + code:12\n\tkeycode: 0\n\tdescription: Screenshot\n\n'
+printf 'bindd\n\tmodmask: 77\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + SHIFT + code:10\n\tkeycode: 0\n\tdescription: Terminal color 1\n\n'
+printf 'bindd\n\tmodmask: 77\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + SHIFT + code:19\n\tkeycode: 0\n\tdescription: Terminal color off\n\n'
 printf 'bindd\n\tmodmask: 76\n\tsubmap: resize\n\tkey: 3\n\tkeycode: 0\n\tdescription: In a submap\n'
 EOF
 # shellcheck disable=SC2016 # $HOME expands when the fake runs
@@ -146,8 +151,88 @@ printf '#!/bin/bash\necho "$HOME/code/current"\n' > "$fake/omarchy-cmd-terminal-
 chmod +x "$fake"/*
 scan=$(PATH="$fake:$PATH" HYPRLAND_INSTANCE_SIGNATURE=test "$helper" scan)
 eq "conflicts: only Super+Ctrl+Alt digits that are not ours; Omarchy's Super+Alt is no clash" \
-  '[{"digit":1,"byCode":true,"description":"Open my notes"},{"digit":2,"byCode":false,"description":"Project: heartwood"}]' \
+  '[{"digit":1,"byCode":true,"description":"Open my notes","shift":false},{"digit":2,"byCode":false,"description":"Project: heartwood","shift":false},{"digit":3,"byCode":true,"description":"Screenshot","shift":true}]' \
   "$(jq -c .conflicts <<< "$scan")"
 eq "current folder of the focused terminal" "~/code/current" "$(jq -r .currentDir <<< "$scan")"
+
+echo "config: colors for any terminal"
+new_home
+mkdir -p "$HOME/code/shop"
+h add '~/code/shop' > /dev/null
+eq "list shows the color keys" "Super+Ctrl+Alt+Shift+3  #681e1e  Red" "$(h list | grep -F 'Shift+3' | sed 's/^ *//')"
+ok "set color 3" h paint-color 3 '#ABCDEF'
+ok "set color 1" h paint-color 1 '#111111'
+ok "set color 8" h paint-color 8 '#222222'
+ok "change color 3" h paint-color 3 '#333333'
+eq "one line each, in order, under a comment" \
+  "~/code/shop             #1a3a5a||# Super+Ctrl+Alt+Shift+1…8 color the terminal you are in; +0 takes the color away.|paint-1 = #111111|paint-3 = #333333|paint-8 = #222222" \
+  "$(grep -v '^# [CT]' "$conf" | sed 1d | paste -sd '|')"
+eq "list names a custom color" "Super+Ctrl+Alt+Shift+3  #333333  your color" "$(h list | grep -F 'Shift+3' | sed 's/^ *//')"
+eq "state has the custom colors" '{"1":"#111111","3":"#333333","8":"#222222"}' "$("$helper" state | jq -c .paint)"
+eq "and they are not problems" "0" "$("$helper" state | jq '.problems | length')"
+fails "keys go up to 8" h paint-color 9 '#111111'
+fails "0 has no color" h paint-color 0 '#111111'
+fails "hex only" h paint-color 2 red
+ok "back to default" h paint-color 1 default
+ok "default twice is fine" h paint-color 1 default
+ok "back to default" h paint-color 3 default
+ok "back to default" h paint-color 8 default
+eq "the comment goes with the last one, file as before" "# Colorful Terminals: one project per line, the folder and then its color.|# The 1st project opens with Super+Ctrl+Alt+1, the 2nd with Super+Ctrl+Alt+2, up to 9.|# Colors are #rrggbb. Edit here or in the panel (Super+Ctrl+Alt+0); both stay in sync.||~/code/shop             #1a3a5a" \
+  "$(paste -sd '|' "$conf")"
+printf 'paint-9 = #111111\npaint-2 = blue\n' >> "$conf"
+eq "bad color lines are problems" "paint-9 = #111111|paint-2 = blue" "$("$helper" state | jq -r '[.problems[].text] | join("|")')"
+eq "a project color is untouched by all this" "1  Super+Ctrl+Alt+1  #1a3a5a  ~/code/shop" "$(h list | head -n 1)"
+mkdir -p "$HOME/.local/state/omarchy/current/theme"
+printf 'accent = "#000000"\nbackground = "#faf4ed"\n' > "$HOME/.local/state/omarchy/current/theme/colors.toml"
+eq "a light theme gets the light palette by default" "Super+Ctrl+Alt+Shift+1  #c3d9f7  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
+printf 'background = "#1a1b26"\n' > "$HOME/.local/state/omarchy/current/theme/colors.toml"
+eq "a dark theme the dark one" "Super+Ctrl+Alt+Shift+1  #1a3a5a  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
+
+echo "config: the color keys"
+# A stand-in Hyprland: the focused window's tags, and a key press that a shell
+# at a prompt answers by emptying the request file.
+fake="$HOME/fake-bin"
+mkdir -p "$fake" "$HOME/run"
+chmod 700 "$HOME/run"
+cat > "$fake/hyprctl" <<'EOF'
+#!/bin/bash
+case $1 in
+  activewindow) printf '{"class":"x","tags":[%s]}\n' "$FAKE_TAGS" ;;
+  eval)
+    printf '%s\n' "$2" > "$HOME/eval.lua"
+    cp "$XDG_RUNTIME_DIR/colorful-terminals/paint" "$HOME/request" 2> /dev/null
+    [[ $FAKE_SHELL == answers ]] && : > "$XDG_RUNTIME_DIR/colorful-terminals/paint"
+    ;;
+esac
+exit 0
+EOF
+cat > "$fake/notify-send" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$HOME/notified"
+EOF
+chmod +x "$fake"/*
+paint() { PATH="$fake:$PATH" HYPRLAND_INSTANCE_SIGNATURE=test XDG_RUNTIME_DIR="$HOME/run" "$helper" paint "$@"; }
+h paint-color 2 '#123456' > /dev/null
+export FAKE_TAGS='"default-opacity*","terminal*"' FAKE_SHELL=answers
+ok "a color key in a terminal" paint 2
+eq "hands over that key's color" "#123456" "$(cat "$HOME/request")"
+ok "sends Ctrl+Alt+Shift+F12 down and up" grep -q 'mods = "CTRL ALT SHIFT", key = "F12", state = "up"' "$HOME/eval.lua"
+ok "and cleans up" test ! -e "$HOME/run/colorful-terminals/paint"
+eq "the folder is private" "700" "$(stat -c %a "$HOME/run/colorful-terminals")"
+ok "no notification when it worked" test ! -e "$HOME/notified"
+ok "0 takes the color away" paint 0
+eq "as a reset" "reset" "$(cat "$HOME/request")"
+ok "a default color" paint 7
+eq "is the palette's" "#262e82" "$(cat "$HOME/request")"
+fails "no key 9" paint 9
+fails "no key 10" paint 10
+FAKE_SHELL=busy fails "a terminal that does not answer" paint 1
+eq "says why" "-a Colorful Terminals -- The terminal kept its color Colors change at a shell prompt, in terminals opened after Colorful Terminals was turned on." "$(cat "$HOME/notified")"
+ok "and leaves nothing behind for a later key press" test ! -e "$HOME/run/colorful-terminals/paint"
+rm -f "$HOME/notified" "$HOME/request"
+FAKE_TAGS='"default-opacity*"' fails "a browser in focus" paint 1
+ok "is told to click a terminal" grep -q 'No terminal in focus' "$HOME/notified"
+ok "and gets no key" test ! -e "$HOME/request"
+unset FAKE_TAGS FAKE_SHELL
 
 finish

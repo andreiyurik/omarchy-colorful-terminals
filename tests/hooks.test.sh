@@ -173,6 +173,54 @@ else
   fi
 fi
 
+echo "hooks: a color of its own (Super+Ctrl+Alt+Shift+digit)"
+# The helper leaves a color in $XDG_RUNTIME_DIR/colorful-terminals/paint and
+# Hyprland presses Ctrl+Alt+Shift+F12 (ESC [24;8~) in the terminal. Here the
+# typed lines leave the color and the key arrives as the terminal would send it.
+key=$'\e[24;8~'
+leave() { printf 'mkdir -p "$XDG_RUNTIME_DIR/colorful-terminals"; echo %s > "$XDG_RUNTIME_DIR/colorful-terminals/paint"' "$1"; }
+paint_walk="$(leave "'#123456'")
+$key
+cd ~/code/shop/src
+$(leave reset)
+$key
+cd /
+$(leave "'#654321'")
+$key"
+# Its own color at once, kept inside a project, the project color back after
+# 0, the theme outside, and a second color.
+paint_expected="11;#123456 11;#1a3a5a 111 11;#654321"
+check_paint() {   # <name> <shell command>
+  local name=$1 command=$2
+  eq "$name: a color of its own, kept in a project, until 0" "$paint_expected" \
+    "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$paint_walk")"
+  eq "$name: says it got the color" "0" "$(stat -c %s "$HOME/run/colorful-terminals/paint" 2> /dev/null)"
+  eq "$name: the key with nothing left does nothing" "" \
+    "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$key")"
+  eq "$name: a bad color is ignored" "" \
+    "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$(leave "'\$(touch ~/pwned)'")
+$key")"
+  ok "$name: and never run" test ! -e "$HOME/pwned"
+}
+if ! command -v script > /dev/null; then
+  echo "  SKIP: needs script(1) for a pseudo-terminal"
+else
+  project_home
+  mkdir -p "$HOME/run" && chmod 700 "$HOME/run"
+  "$helper" integration install --yes > /dev/null
+  check_paint "bash" "$(bash_i)"
+  if [[ -n $zsh ]]; then
+    : > "$HOME/.zshrc"
+    "$helper" integration install --yes > /dev/null
+    check_paint "zsh" "$(zsh_i)"
+  fi
+  if [[ -n $fish ]]; then
+    mkdir -p "$HOME/.config/fish"
+    "$helper" integration install --yes > /dev/null
+    check_paint "fish" "$(fish_i)"
+  fi
+fi
+
 echo "hooks: speed"
 # Every prompt reads projects.conf, so it must stay cheap: 30 projects, 200
 # prompts in a row, no more than 30 ms each on average, best of three runs
@@ -222,7 +270,8 @@ else
   check_tmux() {   # <name> <shell command>
     local name=$1 command=$2 pane i
     t kill-server 2> /dev/null
-    pane=$(t new-session -d -P -F '#{pane_id}' -x 80 -y 24 "$command")
+    mkdir -p "$HOME/run/colorful-terminals" && chmod 700 "$HOME/run" "$HOME/run/colorful-terminals"
+    pane=$(t new-session -d -P -F '#{pane_id}' -x 80 -y 24 "env XDG_RUNTIME_DIR=$HOME/run $command")
     # Type only once the shell has drawn its first prompt.
     for ((i = 0; i < 50; i++)); do [[ -n $(t capture-pane -p -t "$pane" 2> /dev/null | tr -d '[:space:]') ]] && break; sleep 0.1; done
     sleep 0.3
@@ -231,6 +280,17 @@ else
     eq "$name: active style too" "bg=#1a3a5a" "$(t show -p -v -t "$pane" window-active-style 2> /dev/null)"
     t send-keys -t "$pane" 'cd /' Enter
     if wait_for "$pane" ""; then pass; else fail "$name: back to the theme outside" "got: $(pane_bg "$pane")"; fi
+
+    # Super+Ctrl+Alt+Shift+digit: tmux passes Ctrl+Alt+Shift+F12 on to the pane.
+    echo '#123456' > "$HOME/run/colorful-terminals/paint"
+    t send-keys -t "$pane" C-M-S-F12
+    if wait_for "$pane" "bg=#123456"; then pass; else fail "$name: the key colors the pane" "got: $(pane_bg "$pane")"; fi
+    t send-keys -t "$pane" 'cd ~/code/shop' Enter
+    sleep 0.5
+    eq "$name: and the color stays in a project" "bg=#123456" "$(pane_bg "$pane")"
+    echo reset > "$HOME/run/colorful-terminals/paint"
+    t send-keys -t "$pane" C-M-S-F12
+    if wait_for "$pane" "bg=#1a3a5a"; then pass; else fail "$name: 0 gives the project color back" "got: $(pane_bg "$pane")"; fi
     t kill-server 2> /dev/null
   }
   project_home
