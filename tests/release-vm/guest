@@ -88,13 +88,13 @@ case ${1-} in
     mkdir -p "$HOME/work/second"
     border=$(hyprctl -j getoption general:border_size | jq .int)
     check "a second project is added" "$helper" add "$HOME/work/second" '#213f12'
-    hyprctl keyword general:border_size 7 > /dev/null
+    hyprctl eval 'hl.config({ general = { border_size = 7 } })' > /dev/null   # keyword does not work with the Lua config
     check "moving it up" "$helper" move 2 up
     check "Super+Ctrl+Alt+1 is now the second project" wait_for 10 has_bind 'description: Project 1: second'
     check "and Super+Ctrl+Alt+2 the first" has_bind 'description: Project 2: demo'
     check "each key is bound once" bash -c "[[ \$(hyprctl binds | grep -c 'description: Project [12]: ') == 2 ]]"
     check "without a config reload: a runtime keyword survived" bash -c "[[ \$(hyprctl -j getoption general:border_size | jq .int) == 7 ]]"
-    hyprctl keyword general:border_size "$border" > /dev/null
+    hyprctl eval "hl.config({ general = { border_size = $border } })" > /dev/null
     check "moving it back" "$helper" move 1 down
     check "removing it" "$helper" remove 2
     check "Super+Ctrl+Alt+1 is the first project again" wait_for 10 project_key_bound
