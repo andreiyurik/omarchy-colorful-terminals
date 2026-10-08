@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Renders the settings panel offscreen in several states and saves PNGs, then
@@ -80,14 +81,14 @@ ShellRoot {
     visible: true
     implicitWidth: 640
     implicitHeight: 1000
-    color: Color.background
+    color: Commons.Color.background
 
     Item {
       id: frame
       width: 640
       height: Math.max(test.minHeight, Math.ceil(card.height + 80))
 
-      Rectangle { anchors.fill: parent; color: Color.background }
+      Rectangle { anchors.fill: parent; color: Commons.Color.background }
 
       // The same card PanelSurface draws.
       BorderSurface {
@@ -97,8 +98,8 @@ ShellRoot {
         width: 560
         height: view.implicitHeight + contentTopInset + contentBottomInset
         radius: Style.cornerRadius
-        color: Color.menu.background
-        borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+        color: Commons.Color.menu.background
+        borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
         padding: Style.spacing.panelPadding
 
         ProjectsView {
@@ -238,8 +239,8 @@ ShellRoot {
   function turnOffIndex() { return view.turnOffDialog.selectedIndex }
 
   function load(s) {
-    view.themeText = s.light ? "#4c4f69" : Color.foreground
-    view.themeBackground = s.light ? "#eff1f5" : Color.background
+    view.themeText = s.light ? "#4c4f69" : Commons.Color.foreground
+    view.themeBackground = s.light ? "#eff1f5" : Commons.Color.background
     view.undo = null
     view.settled()
     view.scan = s.scan

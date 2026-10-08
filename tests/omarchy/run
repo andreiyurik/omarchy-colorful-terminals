@@ -38,7 +38,19 @@ fetch() {
 
 refs=("$@")
 ((${#refs[@]})) || refs=(release main)
-docker build -q -t colorful-terminals-test:omarchy tests/omarchy > /dev/null || { echo "image build FAILED"; exit 1; }
+# A release is tested on the Arch of its day (a tagged ref gets the Arch Linux
+# Archive snapshot of its commit date), the default branch on today's Arch.
+# Qt moves on Arch, and Omarchy's shell follows it on the default branch;
+# the release should see the Qt its users had when it came out.
+image_for() {   # <ref> <checkout dir>
+  local ref=$1 dir=$2 snapshot="" tag=omarchy
+  if [[ $ref == v[0-9]* ]]; then
+    snapshot=$(git -C "$dir" log -1 --format=%cs | tr - /)
+    tag="omarchy-${snapshot//\//}"
+  fi
+  docker build -q --build-arg "SNAPSHOT=$snapshot" -t "colorful-terminals-test:$tag" tests/omarchy > /dev/null || return 1
+  printf '%s' "colorful-terminals-test:$tag"
+}
 status=0
 for name in "${refs[@]}"; do
   ref=$(resolve "$name")
@@ -49,11 +61,16 @@ for name in "${refs[@]}"; do
     status=1
     continue
   fi
+  if ! image=$(image_for "$ref" "$dir"); then
+    echo "$name: image build FAILED"
+    status=1
+    continue
+  fi
   out="$PWD/tests/omarchy/out/$name"
   rm -rf "$out"
   mkdir -p "$out"
   if docker run --rm --network none -v "$PWD:/src:ro" -v "$dir:/omarchy:ro" -v "$out:/out" \
-    --user "$(id -u):$(id -g)" -e HOME=/tmp/home colorful-terminals-test:omarchy /src/tests/omarchy/inside; then
+    --user "$(id -u):$(id -g)" -e HOME=/tmp/home "$image" /src/tests/omarchy/inside; then
     echo "$name: ok"
   else
     echo "$name: FAILED"

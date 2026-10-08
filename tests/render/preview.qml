@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Builds preview.png (1600x900): three project terminals and the real
@@ -23,19 +24,19 @@ ShellRoot {
     visible: true
     implicitWidth: 1600
     implicitHeight: 900
-    color: Color.background
+    color: Commons.Color.background
 
     Rectangle {
       id: scene
       width: 1600
       height: 900
-      color: Color.background
+      color: Commons.Color.background
 
       Text {
         x: 64; y: 50
         textFormat: Text.PlainText
         text: "Colorful Terminals"
-        color: Color.foreground
+        color: Commons.Color.foreground
         font.family: Style.font.family
         font.pixelSize: 40
         font.bold: true
@@ -44,7 +45,7 @@ ShellRoot {
         x: 64; y: 104
         textFormat: Text.PlainText
         text: "Every project gets its own terminal color. Super+Ctrl+Alt+1…9 opens it."
-        color: Util.alpha(Color.foreground, 0.7)
+        color: Util.alpha(Commons.Color.foreground, 0.7)
         font.family: Style.font.family
         font.pixelSize: 20
       }
@@ -60,7 +61,7 @@ ShellRoot {
             height: 200
             radius: 10
             color: modelData.color
-            border.color: Util.alpha(Color.foreground, 0.18)
+            border.color: Util.alpha(Commons.Color.foreground, 0.18)
             border.width: 1
             Rectangle {
               anchors.right: parent.right; anchors.rightMargin: 14; y: 14
@@ -73,7 +74,7 @@ ShellRoot {
                 anchors.centerIn: parent
                 textFormat: Text.PlainText
                 text: "Super+Ctrl+Alt+" + modelData.key
-                color: Color.foreground
+                color: Commons.Color.foreground
                 font.family: Style.font.family
                 font.pixelSize: 16
               }
@@ -84,21 +85,21 @@ ShellRoot {
               Text {
                 textFormat: Text.PlainText
                 text: modelData.path + " $ " + modelData.lines[0]
-                color: Color.foreground
+                color: Commons.Color.foreground
                 font.family: Style.font.family
                 font.pixelSize: 20
               }
               Text {
                 textFormat: Text.PlainText
                 text: modelData.lines[1]
-                color: Util.alpha(Color.foreground, 0.8)
+                color: Util.alpha(Commons.Color.foreground, 0.8)
                 font.family: Style.font.family
                 font.pixelSize: 20
               }
               Text {
                 textFormat: Text.PlainText
                 text: modelData.lines[2]
-                color: Util.alpha(Color.foreground, 0.8)
+                color: Util.alpha(Commons.Color.foreground, 0.8)
                 font.family: Style.font.family
                 font.pixelSize: 20
               }
@@ -106,11 +107,11 @@ ShellRoot {
                 Text {
                   textFormat: Text.PlainText
                   text: modelData.path + " $ "
-                  color: Color.foreground
+                  color: Commons.Color.foreground
                   font.family: Style.font.family
                   font.pixelSize: 20
                 }
-                Rectangle { width: 11; height: 22; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
+                Rectangle { width: 11; height: 22; color: Commons.Color.foreground; anchors.verticalCenter: parent.verticalCenter }
               }
             }
           }
@@ -126,8 +127,8 @@ ShellRoot {
         scale: 1.5
         transformOrigin: Item.TopLeft
         radius: Style.cornerRadius
-        color: Color.menu.background
-        borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+        color: Commons.Color.menu.background
+        borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
         padding: Style.spacing.panelPadding
         ProjectsView {
           id: view

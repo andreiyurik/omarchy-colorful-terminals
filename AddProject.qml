@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -114,7 +115,7 @@ Column {
             width: Math.min(implicitWidth, parent.width * 0.6)
             elide: Text.ElideMiddle
             text: Model.plain(suggestion.modelData.name, 80)
-            color: suggestion.hasCursor ? Color.menu.selectedText : add.view.text
+            color: suggestion.hasCursor ? Commons.Color.menu.selectedText : add.view.text
             font.family: add.view.fontFamily
             font.pixelSize: Style.font.body
             font.bold: true

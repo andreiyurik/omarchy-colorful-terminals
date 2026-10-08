@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -19,11 +20,11 @@ FocusScope {
   property Item dialogHost: null
 
   property string fontFamily: Style.font.menuFamily
-  property color text: Color.menu.text
-  property color accent: Color.accent
-  property color urgent: Color.urgent
-  property color themeText: Color.foreground
-  property color themeBackground: Color.background
+  property color text: Commons.Color.menu.text
+  property color accent: Commons.Color.accent
+  property color urgent: Commons.Color.urgent
+  property color themeText: Commons.Color.foreground
+  property color themeBackground: Commons.Color.background
   property real maxListHeight: Style.space(420)
 
   signal run(var args)
@@ -405,7 +406,7 @@ FocusScope {
     message: "Turn off Colorful Terminals? This takes its blocks out of your shell, Hyprland and menu config. Your projects are kept."
     confirmText: "Turn off"
     fontFamily: projectsView.fontFamily
-    background: Color.menu.background
+    background: Commons.Color.menu.background
     foreground: projectsView.text
     onCanceled: { opened = false; keyCatcher.forceActiveFocus() }
     onConfirmed: {

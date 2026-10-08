@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Wayland
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // The panel window: a dimmed full-screen layer with the settings card in the
@@ -21,7 +22,7 @@ PanelWindow {
 
   Rectangle {
     anchors.fill: parent
-    color: Color.menu.scrim
+    color: Commons.Color.menu.scrim
   }
 
   MouseArea {
@@ -35,8 +36,8 @@ PanelWindow {
     height: Math.min(view.implicitHeight + contentTopInset + contentBottomInset, panel.height - Style.gapsOut * 4)
     anchors.centerIn: parent
     radius: Style.cornerRadius
-    color: Color.menu.background
-    borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+    color: Commons.Color.menu.background
+    borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
     padding: Style.spacing.panelPadding
     opacity: 0
     scale: 0.98
