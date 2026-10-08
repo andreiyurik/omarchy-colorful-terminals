@@ -1,21 +1,28 @@
-# Colorful Terminals for Omarchy
+# Colorful Terminals for Omarchy: a terminal background color per project
 
 [![Tests](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml/badge.svg)](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml)
 [![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-81a1c1)](https://omarchy.org/)
 [![MIT license](https://img.shields.io/github/license/andreiyurik/omarchy-colorful-terminals?color=9ece6a)](LICENSE)
 
-Give every project its own terminal color, so you always know which project a terminal belongs to.
+Colorful Terminals is an [Omarchy](https://omarchy.org/) plugin that gives every project folder its own terminal background color, so you always know which project a terminal belongs to. `cd` into a project and the terminal turns its color. `Super+Ctrl+Alt+1…9` opens a project in a new terminal or jumps to its open window.
 
-An [Omarchy](https://omarchy.org/) plugin for Hyprland: a different terminal background color per project folder in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux too, `Super+Ctrl+Alt+1…9` hotkeys that open a project or jump to its window, and `Super+Ctrl+Alt+Shift+1…8` to give any terminal a color of its own.
+It works in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux, on Hyprland, and alongside any project launcher. The settings live in one small panel in the Omarchy shell.
 
-![Three terminals tinted blue, green and red by project, next to the Colorful Terminals settings panel](preview.png)
+![Three terminals on Omarchy Linux with a different background color per project: blue, green and red. Next to them the Colorful Terminals panel lists each project with its Super+Ctrl+Alt hotkey and color.](preview.png)
+
+## Why color terminals by project
+
+With five or ten terminals open on Hyprland they all look the same, and the wrong `git push` or `rm` ends up in the wrong project. A color you see at a glance is faster than reading a prompt or a window title. Colorful Terminals keys the color off the folder, not off how the terminal was opened, so it works with Project Launcher, Tableau, a tmux sessionizer, or a plain `cd`.
+
+## Features
 
 - **Automatic.** `cd` into a project and the background turns its color. Leave it and the theme color comes back. Subfolders keep the project color; a project inside another project keeps its own.
-- **Project keys.** `Super+Ctrl+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open.
-- **Any terminal.** `Super+Ctrl+Alt+Shift+1…8` colors the terminal you are in, project or not; `Super+Ctrl+Alt+Shift+0` takes the color away. The panel shows the eight colors, and you can change each one.
-- **One small panel.** Add folders, pick colors, and reorder, with the keyboard or the mouse. Every change is saved as you make it.
-
-It keys off the folder, not the way the terminal was opened, so it works with any project launcher (Project Launcher, Tableau, a tmux sessionizer, or plain `cd`).
+- **Project hotkeys.** `Super+Ctrl+Alt+1…9` opens project 1…9 in a terminal, or jumps to its window if one is already open. The panel shows each project's key under its name, and Omarchy's keybindings list (`Super+K`) shows them all.
+- **No conflicts with Omarchy.** Every other `Super`+digit combination is Omarchy's own (workspaces, moving windows, bar panels, group tabs). The plugin never takes a key of Omarchy's, and the panel tells you if one of your own bindings shares a key.
+- **A color for any terminal.** `Super+Ctrl+Alt+Shift+1…8` gives the terminal you are in one of eight colors, project or not; `Super+Ctrl+Alt+Shift+0` takes it away.
+- **Readable on every theme.** Eight dark colors picked for light text on Omarchy's dark themes, and a light palette for light themes. The panel marks a color that is hard to read on your theme.
+- **One small panel.** Add folders, pick colors, reorder, with the keyboard or the mouse. Every change is saved as you make it, to a plain text file you can also edit by hand.
+- **Honest about what it changes.** Nothing changes until you choose **Turn on**, the panel lists every file first, backups are saved, and **Turn off** gives each file back exactly as it was. No sudo, no network.
 
 ## Install
 
@@ -33,7 +40,9 @@ After that, the bar icon, `Super+Ctrl+Alt+0`, or **Omarchy menu › Style › Co
 
 To update: `omarchy plugin update andreiyurik.colorful-terminals`, then `omarchy restart shell` so the new panel shows. (The shell reloads a plugin's entry file on its own, but keeps parts it has already loaded until it restarts.)
 
-## Keys
+## Usage
+
+### Hotkeys
 
 | Keys | What it does |
 |---|---|
@@ -46,7 +55,7 @@ Omarchy's own keybindings list (`Super+K`) shows them all, each project key with
 
 A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when you `cd` into a project and goes away with `Super+Ctrl+Alt+Shift+0` or when the terminal closes. It is always the terminal you are in, even when one terminal program draws all your windows, because the shell in that terminal does the coloring: Hyprland passes the key to the focused window. So it works at a shell prompt; if a program is running there, a notification says so and nothing changes.
 
-In the panel:
+### In the panel
 
 | Keys | What it does |
 |---|---|
@@ -64,7 +73,7 @@ On the **Any terminal** row: `←` `→` go from key to key, `Shift+←` `Shift+
 
 The bottom of the panel shows the few keys that matter for what is selected, and the buttons show theirs on hover. Everything also works with the mouse. Letter keys go by position, so they work on any keyboard layout, and the folder field understands a path typed on a Russian layout (`Ё.` is `~/`).
 
-## The settings file
+## Configure
 
 Everything lives in one file you can also edit by hand:
 `~/.config/colorful-terminals/projects.conf`. The panel picks up your edits
@@ -131,17 +140,37 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 
 ## FAQ
 
-**How do I change the terminal background color per directory?**
-Add the folder in the panel. The shell hook sends the standard OSC 11 escape code whenever you enter it, and OSC 111 to restore the theme color when you leave. Inside tmux it sets the pane's style instead, so each pane keeps its own color.
+### How do I change the terminal background color per directory on Omarchy?
 
-**Does it work with my terminal?**
-With any terminal that supports OSC 11: Ghostty (Omarchy's default), Kitty, Alacritty and foot all do. And with bash, zsh and fish, in tmux or not.
+Install the plugin and add the folder in the panel. The shell hook sends the standard OSC 11 escape code whenever you enter that folder, and OSC 111 to restore the theme color when you leave. Inside tmux it sets the pane's style instead, so each pane keeps its own color.
 
-**Can I tell projects apart at a glance in Hyprland?**
+### Does it work with Ghostty, Kitty, Alacritty and foot?
+
+Yes. Ghostty is Omarchy's default terminal; Kitty, Alacritty and foot work the same way, because all four support OSC 11. Any other terminal that supports OSC 11 works too.
+
+### Does it work with zsh, fish and tmux?
+
+Yes. The hook is written for bash, zsh and fish, and each is tested on Arch, Ubuntu, Debian and Fedora. Inside tmux each pane gets its own color, in all three shells.
+
+### Does it conflict with Omarchy's keybindings?
+
+No. Omarchy uses `Super`, `Super+Shift`, `Super+Shift+Alt`, `Super+Ctrl` and `Super+Alt` with the digit keys; the plugin uses `Super+Ctrl+Alt` and `Super+Ctrl+Alt+Shift`, which Omarchy leaves free. The panel warns if one of your own bindings shares a key, and the release test checks every Omarchy key is untouched.
+
+### Can I tell projects apart at a glance in Hyprland?
+
 Yes: every project terminal has its own color, and its window gets the app id `org.omarchy.project_<name>`, so `Super+Ctrl+Alt+N` finds it again instead of opening a second one.
 
-**Does it need a project launcher?**
+### Does it need a project launcher?
+
 No, and it works alongside one. The color depends only on the current folder.
+
+### Is it safe? What does it change on my system?
+
+It adds one marked block to `~/.bashrc` (and `~/.zshrc` or fish's `conf.d` if you use those shells), to `~/.config/hypr/hyprland.lua` and to the Omarchy menu extension file, and only after you choose **Turn on**. Each file is backed up first and **Turn off** restores it byte for byte. Nothing needs sudo, nothing goes over the network. See [What it changes](#what-it-changes).
+
+### How do I pick a color that reads well on my theme?
+
+The eight palette colors are dark enough for light text on every stock Omarchy theme, and the light palette does the same for light themes. If you type a custom color, the panel marks it when the theme's text would be hard to read on it or when it looks the same as the theme background.
 
 ## Development
 
