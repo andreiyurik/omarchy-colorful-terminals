@@ -70,6 +70,18 @@ load()
 eq("an old replace-group-keys line changes nothing", 0, #unbinds)
 eq("and still binds every key", 19, #binds)
 
+print("keys: re-binding at runtime")
+write("~/code/shop  #111111\n")
+reset()
+dofile(repo .. "/hypr/keys.lua")(repo, { rebind = true })
+eq("re-binding unbinds every key of ours first", 19, #unbinds)
+eq("starting with project 1", "SUPER + CTRL + ALT + code:10", unbinds[1])
+eq("then binds them all again", 19, #binds)
+local same = true
+for i = 1, 19 do if unbinds[i] ~= binds[i].keys then same = false end end
+eq("the same keys, nothing else", true, same)
+eq("with fresh names", "Project 1: shop", binds[1].description)
+
 print("keys: color names")
 local function descriptions_with(text)
   write("~/a  #111111\n" .. text)

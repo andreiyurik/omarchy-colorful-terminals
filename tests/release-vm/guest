@@ -84,6 +84,23 @@ case ${1-} in
     check "Hyprland reports no config errors" bash -c '[[ -z $(hyprctl configerrors | grep -v "^$" | grep -vi "no errors") ]]'
     ;;
 
+  move)   # reordering re-binds our keys only: a runtime keyword must survive it
+    mkdir -p "$HOME/work/second"
+    border=$(hyprctl -j getoption general:border_size | jq .int)
+    check "a second project is added" "$helper" add "$HOME/work/second" '#213f12'
+    hyprctl keyword general:border_size 7 > /dev/null
+    check "moving it up" "$helper" move 2 up
+    check "Super+Ctrl+Alt+1 is now the second project" wait_for 10 has_bind 'description: Project 1: second'
+    check "and Super+Ctrl+Alt+2 the first" has_bind 'description: Project 2: demo'
+    check "each key is bound once" bash -c "[[ \$(hyprctl binds | grep -c 'description: Project [12]: ') == 2 ]]"
+    check "without a config reload: a runtime keyword survived" bash -c "[[ \$(hyprctl -j getoption general:border_size | jq .int) == 7 ]]"
+    hyprctl keyword general:border_size "$border" > /dev/null
+    check "moving it back" "$helper" move 1 down
+    check "removing it" "$helper" remove 2
+    check "Super+Ctrl+Alt+1 is the first project again" wait_for 10 project_key_bound
+    check "and Super+Ctrl+Alt+2 is free again" has_bind 'description: Project 2: not set'
+    ;;
+
   project-windows)   # prints how many windows the project has
     hyprctl clients -j | jq '[.[] | select(.class | startswith("org.omarchy.project_demo"))] | length'
     ;;
@@ -161,7 +178,7 @@ case ${1-} in
     ;;
 
   *)
-    echo "usage: guest session-ready|add|panel <name>|turn-on|project-windows|window-pixel|active-pixel|active-class|color-keys-bound|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
+    echo "usage: guest session-ready|add|panel <name>|turn-on|move|project-windows|window-pixel|active-pixel|active-class|color-keys-bound|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
     exit 2
     ;;
 esac

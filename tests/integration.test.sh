@@ -161,4 +161,40 @@ else
   ok "no escape codes without a terminal" test "$(grep -c $'\x1b\\]11' <<< "$out")" = 0
 fi
 
+echo "integration: changing projects refreshes the keys without a config reload"
+# A fake hyprctl records every call. `binds` answers with our own keys only,
+# then with a clash on Super+Ctrl+Alt+1.
+omarchy_home
+fake="$HOME/fake-bin"
+mkdir -p "$fake" "$HOME/code/shop" "$HOME/code/blog" "$HOME/code/api"
+cat > "$fake/hyprctl" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$HOME/hyprctl.calls"
+[[ $1 == binds ]] || exit 0
+printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:10\n\tkeycode: 0\n\tdescription: Project 1: shop\n\n'
+[[ -f $HOME/clash ]] && printf 'bindd\n\tmodmask: 76\n\tsubmap: \n\tkey: SUPER + CTRL + ALT + code:10\n\tkeycode: 0\n\tdescription: Open my notes\n\n'
+exit 0
+EOF
+chmod +x "$fake/hyprctl"
+with_hypr() { PATH="$fake:$PATH" HYPRLAND_INSTANCE_SIGNATURE=test "$helper" "$@"; }
+calls() { grep -v '^binds' "$HOME/hyprctl.calls" 2> /dev/null | cut -d' ' -f1 | sort -u | paste -sd ' '; }
+ok "add before turning on" with_hypr add "$HOME/code/shop" '#1a3a5a'
+eq "touches Hyprland only when the keys block is installed" "" "$(calls)"
+ok "turn on" "$helper" integration install --yes
+: > "$HOME/hyprctl.calls"
+ok "add" with_hypr add "$HOME/code/blog" '#213f12'
+ok "move" with_hypr move 2 up
+ok "color key" with_hypr paint-color 3 '#5a1a3a'
+ok "remove" with_hypr remove 1
+eq "each change re-binds through eval, never a config reload" "eval" "$(calls)"
+eq "four changes, four re-binds" "4" "$(grep -c '^eval' "$HOME/hyprctl.calls")"
+ok "the eval runs hypr/keys.lua in rebind mode from the plugin folder" \
+  grep -qF 'dofile(dir .. "/hypr/keys.lua")(dir, { rebind = true })' "$HOME/hyprctl.calls"
+ok "from this plugin folder" grep -qF "${helper%/bin/*}" "$HOME/hyprctl.calls"
+touch "$HOME/clash"
+: > "$HOME/hyprctl.calls"
+ok "add with a clash on one of our keys" with_hypr add "$HOME/code/api" '#681e1e'
+eq "then the keys are left alone, so the other binding survives" "" "$(calls)"
+ok "a change without Hyprland is fine" env -u HYPRLAND_INSTANCE_SIGNATURE "$helper" move 1 down
+
 finish

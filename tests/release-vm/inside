@@ -254,6 +254,7 @@ guest panel 02-panel-first-run | result
 
 log "Turn it on"
 guest turn-on | result
+guest move | result
 
 log "Super+Ctrl+Alt+1 opens the project"
 press meta_l-ctrl-alt-1

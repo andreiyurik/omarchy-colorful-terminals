@@ -134,6 +134,9 @@ FocusScope {
       note = "Turned off. New terminals use the theme color; your projects are kept."
     } else if (args[0] === "remove") {
       flash("Removed")
+    } else if (args[0] === "move") {
+      var to = parseInt(args[1], 10) + (args[2] === "up" ? -1 : 1)
+      flash(to >= 1 && to <= Model.MAX_KEYS ? "Now " + Model.keyLabel(to) : "Moved")
     } else if (args[0] === "add") {
       flash("Added")
     } else {

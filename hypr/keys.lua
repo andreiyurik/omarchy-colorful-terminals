@@ -12,6 +12,12 @@
 -- pressed, so hand edits work without a reload, and a key without a project
 -- opens the panel. Keys are bound by keycode (code:10 is the 1 key), the same
 -- way Omarchy binds its own digit keys, so they work on any keyboard layout.
+--
+-- Only the names change when projects change. The helper refreshes them with
+-- `hyprctl eval`, which runs this file again with { rebind = true }: each of
+-- our keys is unbound and bound again, and nothing else in Hyprland is
+-- touched. A config reload would re-apply monitors and undo what other
+-- plugins set at runtime, so it is never used.
 
 local M = {}
 
@@ -93,12 +99,19 @@ local function folder_name(path)
   return name
 end
 
-function M.setup(dir)
+function M.setup(dir, opts)
   local home = os.getenv("HOME") or ""
   local conf = home .. "/.config/colorful-terminals/projects.conf"
   local helper = o.shell_quote(dir .. "/bin/colorful-terminals")
   local projects, settings = M.read(conf)
   local light = M.theme_is_light()
+  local rebind = opts and opts.rebind
+
+  -- At startup the key is free; when re-binding, our old binding goes first.
+  local function bind(keys, description, command)
+    if rebind then hl.unbind(keys) end
+    o.bind(keys, description, command)
+  end
 
   -- No commas in a description: Omarchy's keybindings list cuts it there.
   for n = 1, 9 do
@@ -106,22 +119,22 @@ function M.setup(dir)
     local project = projects[n]
     local description = project and ("Project " .. n .. ": " .. folder_name(project.path))
       or ("Project " .. n .. ": not set (opens Colorful Terminals)")
-    o.bind(keys, description, helper .. " open " .. n)
+    bind(keys, description, helper .. " open " .. n)
   end
 
-  o.bind("SUPER + CTRL + ALT + code:19", "Colorful Terminals settings",
+  bind("SUPER + CTRL + ALT + code:19", "Colorful Terminals settings",
     "omarchy-shell shell toggle andreiyurik.colorful-terminals '{}'")
 
   -- The helper finds out whether a terminal is focused and hands it the color
   -- (see `colorful-terminals paint`); the colors are set in the panel.
   for n = 1, 8 do
-    o.bind("SUPER + CTRL + ALT + SHIFT + code:" .. tostring(n + 9),
+    bind("SUPER + CTRL + ALT + SHIFT + code:" .. tostring(n + 9),
       "Terminal color " .. n .. ": " .. M.paint_name(n, settings, light), helper .. " paint " .. n)
   end
-  o.bind("SUPER + CTRL + ALT + SHIFT + code:19", "Terminal color off", helper .. " paint 0")
+  bind("SUPER + CTRL + ALT + SHIFT + code:19", "Terminal color off", helper .. " paint 0")
 end
 
-return function(dir)
-  M.setup(dir)
+return function(dir, opts)
+  M.setup(dir, opts)
   return M
 end

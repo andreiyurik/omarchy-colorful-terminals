@@ -220,7 +220,7 @@ cmd_add() {
   fi
   lines=("${lines[@]:0:pos}" "$entry" "${lines[@]:pos}")
   write_config
-  reload_hyprland
+  refresh_keys
   if ((n <= max_keys)); then
     echo "Added $(display_path "$folder") as project $n (Super+Ctrl+Alt+$n)"
   else
@@ -237,7 +237,7 @@ cmd_remove() {
   parse_project "$1"
   lines=("${lines[@]:0:pos}" "${lines[@]:pos+1}")
   write_config
-  reload_hyprland
+  refresh_keys
   echo "Removed $_ct_path_text"
 }
 
@@ -261,7 +261,7 @@ cmd_move() {
   lines[a]=${lines[b]}
   lines[b]=$tmp
   write_config
-  reload_hyprland
+  refresh_keys
   parse_project "$other"
   echo "$_ct_path_text is now project $other"
 }
@@ -278,12 +278,24 @@ cmd_color() {
   echo "$_ct_path_text is now $(lower "$2")"
 }
 
-# Keys read projects.conf when pressed; the reload only refreshes their names
-# in the keybindings list.
-reload_hyprland() {
-  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE-} ]] && command -v hyprctl > /dev/null && has_block hyprland; then
-    timeout 5 hyprctl reload > /dev/null 2>&1 || true
-  fi
+# Keys read projects.conf when pressed; only their names in the keybindings
+# list go stale when projects or colors change. This refreshes them by running
+# hypr/keys.lua again inside Hyprland with { rebind = true }: each of our keys
+# is unbound and bound again, and nothing else is touched. Never `hyprctl
+# reload`: that re-applies the whole config, resets monitors and undoes what
+# other plugins set at runtime. Skipped when another binding shares one of our
+# keys, since unbind would take that one too (the panel shows the clash), and
+# when Hyprland or the keys block is not there. A failure changes nothing:
+# the names catch up at the next login.
+refresh_keys() {
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE-} ]] && command -v hyprctl > /dev/null && has_block hyprland || return 0
+  [[ $(find_conflicts) == "[]" ]] || return 0
+  timeout 3 hyprctl eval "$(rebind_lua)" > /dev/null 2>&1 || true
+}
+
+rebind_lua() {
+  printf 'local dir = %s; local f = io.open(dir .. "/hypr/keys.lua"); if f then f:close(); dofile(dir .. "/hypr/keys.lua")(dir, { rebind = true }) end' \
+    "$(lua_path "$plugin_dir")"
 }
 
 notify() {
@@ -405,7 +417,7 @@ cmd_paint_color() {
     add_paint_setting "$n" "$line"
   fi
   write_config
-  reload_hyprland
+  refresh_keys
   if [[ $color == default ]]; then
     echo "Super+Ctrl+Alt+Shift+$n is back to $(paint_color "$n")"
   else

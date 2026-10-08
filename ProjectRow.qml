@@ -134,7 +134,7 @@ CursorSurface {
 
         PanelActionButton {
           iconText: "󰁝"
-          tooltipText: "Move up · Shift+↑"
+          tooltipText: "Move up · Shift+↑" + (row.n > 1 && row.n - 1 <= Model.MAX_KEYS ? " · becomes " + Model.keyLabel(row.n - 1) : "")
           foreground: row.view.text
           fontFamily: row.view.fontFamily
           enabled: row.expanded && row.index > 0
@@ -142,7 +142,7 @@ CursorSurface {
         }
         PanelActionButton {
           iconText: "󰁅"
-          tooltipText: "Move down · Shift+↓"
+          tooltipText: "Move down · Shift+↓" + (row.n + 1 <= Model.MAX_KEYS ? " · becomes " + Model.keyLabel(row.n + 1) : " · no key")
           foreground: row.view.text
           fontFamily: row.view.fontFamily
           enabled: row.expanded && row.index < row.view.projects.length - 1
