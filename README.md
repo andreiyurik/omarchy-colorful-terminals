@@ -32,14 +32,14 @@ To update: `omarchy plugin update andreiyurik.colorful-terminals`, then `omarchy
 
 ## What works where
 
-Every terminal that understands the standard OSC 11 escape code can be colored. Omarchy's four terminals all do.
+Every terminal that understands the standard OSC 11 escape code can be colored. The four Omarchy ships configs for all do.
 
 | Terminal | Project colors | Color keys (`Super+Ctrl+Alt+Shift`) | Notes |
 |---|:-:|:-:|---|
-| Ghostty (Omarchy's default) | ✓ | ✓ | Tested on every release in a real Omarchy VM |
+| Ghostty | ✓ | ✓ | The author's daily terminal |
 | Kitty | ✓ | ✓ | Each kitty window has its own color |
 | Alacritty | ✓ | ✓ | |
-| foot | ✓ | ✓ | |
+| foot | ✓ | ✓ | Tested on every release in a real Omarchy VM |
 | Any other terminal with OSC 11 (WezTerm, Konsole, GNOME Terminal) | ✓ | ✓ | Not tested by the release test |
 
 The shell does the coloring, so your shell matters more than your terminal.
@@ -195,7 +195,7 @@ tests/release-vm/run   # before a release: the plugin in a real Omarchy, in QEMU
 
 The tests never touch your real `~/.bashrc`, `~/.zshrc` or `~/.config`. `tests/distros/run` runs the shell tests in a container per distribution, with each one's own shells and system shell config, as a normal user and without network; CI runs it for all four. `tests/omarchy/run` renders the panel on Omarchy's own shell code, fetched from GitHub: the latest release, on the Arch packages of its release day (the Arch Linux Archive), and the default branch, on today's Arch, since Qt moves and Omarchy's shell follows it. CI runs it on every push and once a day, so a change in Omarchy that breaks the panel is caught before a release reaches users.
 
-Before a release, `tests/release-vm/run` installs the real Omarchy ISO in a QEMU/KVM virtual machine and goes through the plugin the way a user does: `omarchy plugin add`, the bar icon and the panel, Turn on, `Super+Ctrl+Alt+1` pressed on a virtual keyboard, the project terminal and its color in Ghostty, `Super+Ctrl+Alt+0`, `omarchy plugin update`, Turn off (every file back byte for byte), and `omarchy plugin remove`. QEMU runs in a container, so nothing is installed on your machine. The first run downloads the 6 GB ISO and installs Omarchy, up to 40 minutes; the installed system is cached and later runs take minutes. Screenshots land in `tests/release-vm/out/`.
+Before a release, `tests/release-vm/run` installs the real Omarchy ISO in a QEMU/KVM virtual machine and goes through the plugin the way a user does: `omarchy plugin add`, the bar icon and the panel, Turn on, `Super+Ctrl+Alt+1` pressed on a virtual keyboard, the project terminal and its color in foot (the terminal Omarchy's ISO opens), `Super+Ctrl+Alt+0`, `omarchy plugin update`, Turn off (every file back byte for byte), and `omarchy plugin remove`. QEMU runs in a container, so nothing is installed on your machine. The first run downloads the 6 GB ISO and installs Omarchy, up to 40 minutes; the installed system is cached and later runs take minutes. Screenshots land in `tests/release-vm/out/`.
 
 A release is tagged only when all three are green: `tests/run` with CI (every push), `tests/omarchy/run` (every push and daily), and `tests/release-vm/run` (before the tag). The hook tests use zsh, fish and tmux when they are installed (`CT_ZSH` and `CT_FISH` point at other binaries) and skip them otherwise.
 
