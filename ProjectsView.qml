@@ -204,7 +204,7 @@ FocusScope {
 
   function setColor(n, color) {
     var c = Model.hexOf(color)
-    if (!c) { error = "Colors look like #1a3a5a"; return }
+    if (!c) { error = "Colors look like #003b63"; return }
     if (n - 1 < rowModel.count) rowModel.setProperty(n - 1, "tint", c)
     request(["color", String(n), c])
   }
@@ -225,7 +225,7 @@ FocusScope {
   // so it follows the theme between dark and light.
   function setPaintColor(n, color) {
     var c = Model.hexOf(color)
-    if (!c) { error = "Colors look like #1a3a5a"; return }
+    if (!c) { error = "Colors look like #003b63"; return }
     var standard = palette[n - 1] ? Model.hexOf(palette[n - 1].color) : ""
     var local = Object.assign({}, paintLocal)
     local[n] = c
@@ -308,7 +308,7 @@ FocusScope {
 
   function applyHex(value) {
     var c = Model.hexOf(value)
-    if (!c) { error = "Type a color like #1a3a5a"; return }
+    if (!c) { error = "Type a color like #003b63"; return }
     if (target === "paint") setPaintColor(paintSlot, c)
     else setColor(current.n, c)
     mode = "list"
@@ -501,8 +501,8 @@ FocusScope {
             + Model.plain(projectsView.config.file || "projects.conf", 80) + ". Line " + first.line + ": “"
             + Model.plain(first.text, 50) + "”. "
             + (/^paint-/.test(String(first.text))
-              ? "A color key line is a key from 1 to 8 and a color, like paint-3 = #681e1e."
-              : "A project line is a folder and a color, like ~/code/shop #1a3a5a.")
+              ? "A color key line is a key from 1 to 8 and a color, like paint-3 = #5e2024."
+              : "A project line is a folder and a color, like ~/code/shop #003b63.")
         }
         color: projectsView.urgent
         font.family: projectsView.fontFamily

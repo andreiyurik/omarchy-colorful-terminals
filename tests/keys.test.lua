@@ -58,7 +58,7 @@ eq("helper opens by number", "'" .. repo .. "/bin/colorful-terminals' open 1", b
 eq("nothing of Omarchy's is unbound", 0, #unbinds)
 eq("color keys add Shift", "SUPER + CTRL + ALT + SHIFT + code:10", binds[11].keys)
 eq("color key says what it is and names the color", "Terminal color 1: Blue", binds[11].description)
-eq("color 8 is named too", "Terminal color 8: Jade", binds[18].description)
+eq("color 8 is named too", "Terminal color 8: Black", binds[18].description)
 eq("color key runs the helper", "'" .. repo .. "/bin/colorful-terminals' paint 1", binds[11].dispatcher)
 eq("color 8", "SUPER + CTRL + ALT + SHIFT + code:17", binds[18].keys)
 eq("0 takes the color away", "SUPER + CTRL + ALT + SHIFT + code:19", binds[19].keys)
@@ -100,9 +100,9 @@ local function with_theme(background, body)
   os.execute("mkdir -p '" .. os.getenv("HOME") .. "/.local' && ln -s '" .. state .. "' '" .. os.getenv("HOME") .. "/.local/state'")
   return body()
 end
-eq("a light theme names the light palette", "Terminal color 5: Pink",
+eq("a light theme names the light palette", "Terminal color 5: Peach",
   with_theme("#eff1f5", function() write("~/a  #111111\n"); load(); return binds[15].description end))
-eq("a dark theme names the dark palette", "Terminal color 5: Plum",
+eq("a dark theme names the dark palette", "Terminal color 5: Orange",
   with_theme("#1a1b26", function() write("~/a  #111111\n"); load(); return binds[15].description end))
 os.execute("rm -rf '" .. os.getenv("HOME") .. "/.local/state'")
 

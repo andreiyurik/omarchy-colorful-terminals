@@ -9,14 +9,14 @@ ShellRoot {
   id: test
   readonly property string outFile: Quickshell.env("CT_PREVIEW_FILE")
   readonly property var palette: [
-    { name: "Blue", color: "#1a3a5a" }, { name: "Green", color: "#213f12" }, { name: "Red", color: "#681e1e" },
-    { name: "Violet", color: "#4c2276" }, { name: "Plum", color: "#621d4b" }, { name: "Brown", color: "#4c3316" },
-    { name: "Indigo", color: "#262e82" }, { name: "Jade", color: "#13402a" }
+    { name: "Blue", color: "#003b63" }, { name: "Green", color: "#1a4311" }, { name: "Red", color: "#5e2024" },
+    { name: "Purple", color: "#3c2c61" }, { name: "Orange", color: "#582a00" }, { name: "Teal", color: "#00454a" },
+    { name: "Magenta", color: "#572142" }, { name: "Black", color: "#000000" }
   ]
   readonly property var terminals: [
-    { key: 1, name: "shop", path: "~/code/shop", color: "#1a3a5a", lines: ["git status", "On branch main", "nothing to commit, working tree clean"] },
-    { key: 2, name: "blog", path: "~/code/blog", color: "#213f12", lines: ["npm run dev", "  ready in 412 ms", "  ➜  Local: http://localhost:5173/"] },
-    { key: 3, name: "api-gateway", path: "~/work/api-gateway", color: "#681e1e", lines: ["ssh deploy@prod-1", "Last login: Fri Sep 25 18:02", "deploy@prod-1:~$ tail -f app.log"] }
+    { key: 1, name: "shop", path: "~/code/shop", color: "#003b63", lines: ["git status", "On branch main", "nothing to commit, working tree clean"] },
+    { key: 2, name: "blog", path: "~/code/blog", color: "#1a4311", lines: ["npm run dev", "  ready in 412 ms", "  ➜  Local: http://localhost:5173/"] },
+    { key: 3, name: "api-gateway", path: "~/work/api-gateway", color: "#5e2024", lines: ["ssh deploy@prod-1", "Last login: Fri Sep 25 18:02", "deploy@prod-1:~$ tail -f app.log"] }
   ]
 
   FloatingWindow {
@@ -137,9 +137,9 @@ ShellRoot {
           loaded: true
           config: ({
             projects: [
-              { n: 1, path: "~/code/shop", color: "#1a3a5a", name: "shop", exists: true },
-              { n: 2, path: "~/code/blog", color: "#213f12", name: "blog", exists: true },
-              { n: 3, path: "~/work/api-gateway", color: "#681e1e", name: "api-gateway", exists: true }
+              { n: 1, path: "~/code/shop", color: "#003b63", name: "shop", exists: true },
+              { n: 2, path: "~/code/blog", color: "#1a4311", name: "blog", exists: true },
+              { n: 3, path: "~/work/api-gateway", color: "#5e2024", name: "api-gateway", exists: true }
             ],
             palette: test.palette, problems: [], integration: { installed: true }
           })

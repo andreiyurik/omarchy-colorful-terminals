@@ -251,7 +251,7 @@ Column {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           leftPadding: Style.space(8)
-          text: keys.view.hexPreview === "" ? "Like #1a3a5a" : keys.issue
+          text: keys.view.hexPreview === "" ? "Like #003b63" : keys.issue
           color: keys.view.hexPreview === "" ? keys.view.dim : keys.view.urgent
           font.family: keys.view.fontFamily
           font.pixelSize: Style.font.caption

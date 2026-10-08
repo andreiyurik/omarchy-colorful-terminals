@@ -23,15 +23,15 @@ const lightColors = helper.match(/^light_colors=\((.*)\)$/m)[1].split(" ").map(s
 const lightPalette = lightNames.map((name, i) => ({ name, color: lightColors[i] }))
 
 console.log("model: colors")
-eq("hex normalizes", "#1a3a5a", M.hexOf("1A3A5A"))
-eq("qt color with alpha", "#1a3a5a", M.hexOf("#ff1a3a5a"))
+eq("hex normalizes", "#003b63", M.hexOf("003B63"))
+eq("qt color with alpha", "#003b63", M.hexOf("#ff003b63"))
 eq("bad hex", "", M.hexOf("#12"))
 eq("black on white is 21:1", 21, Math.round(M.contrast("#000000", "#ffffff")))
 eq("light theme detected", true, M.isLightTheme("#eff1f5"))
 eq("dark theme", false, M.isLightTheme("#2e3440"))
 eq("low contrast flagged", "Text is hard to read on this color", M.colorIssue("#9aa0a6", "#d8dee9", "#2e3440"))
 eq("same as theme flagged", "Looks the same as your theme", M.colorIssue("#2e3441", "#d8dee9", "#2e3440"))
-eq("good color passes", "", M.colorIssue("#1a3a5a", "#d8dee9", "#2e3440"))
+eq("good color passes", "", M.colorIssue("#003b63", "#d8dee9", "#2e3440"))
 
 // Every palette color must read well on every dark Omarchy theme we can find.
 const themeDir = "/usr/share/omarchy/themes"
@@ -46,7 +46,12 @@ if (fs.existsSync(themeDir)) {
     if (!fg || !bg) continue
     const light = M.isLightTheme(bg)
     light ? checkedLight++ : checked++
-    for (const p of light ? lightPalette : palette) eq(`${p.name} on ${theme}`, "", M.colorIssue(p.color, fg, bg))
+    const pal = light ? lightPalette : palette
+    for (const p of pal.slice(0, 7)) eq(`${p.name} on ${theme}`, "", M.colorIssue(p.color, fg, bg))
+    // The neutral (black or gray) is the background of a few themes; there the panel marks it.
+    const neutral = M.colorIssue(pal[7].color, fg, bg)
+    eq(`${pal[7].name} on ${theme} reads, or is marked as the theme's own color`, true,
+      neutral === "" || neutral === "Looks the same as your theme")
   }
   eq("checked some dark themes", true, checked > 5)
   eq("checked some light themes", true, checkedLight > 2)
@@ -54,23 +59,24 @@ if (fs.existsSync(themeDir)) {
 
 console.log("model: palette")
 eq("eight colors", 8, palette.length)
-// Swatches must be told apart at a glance: no two closer than 6% of the RGB cube.
+// A coarse RGB check that the swatches differ; tests/palette.test.js measures
+// the real distinctness (CIE Lab) against every stock theme.
 let closest = 1
 for (let i = 0; i < palette.length; i++)
   for (let j = i + 1; j < palette.length; j++) closest = Math.min(closest, M.distance(palette[i].color, palette[j].color))
-eq("palette colors are far apart", true, closest > 0.06)
+eq("palette colors are far apart", true, closest > 0.05)
 eq("eight light colors", 8, lightPalette.length)
 closest = 1
 for (let i = 0; i < lightPalette.length; i++)
   for (let j = i + 1; j < lightPalette.length; j++) closest = Math.min(closest, M.distance(lightPalette[i].color, lightPalette[j].color))
-eq("light colors are far apart too", true, closest > 0.06)
-const projects = [{ n: 1, path: "~/a", color: "#1a3a5a" }]
-eq("free color skips used", "#213f12", M.freeColor(palette, projects, "#d8dee9", "#2e3440"))
-eq("free color skips poor ones", "#213f12", M.freeColor([{ name: "x", color: "#2e3440" }].concat(palette), projects, "#d8dee9", "#2e3440"))
-eq("step right", "#213f12", M.stepColor(palette, "#1a3a5a", 1))
-eq("step left wraps", palette[palette.length - 1].color, M.stepColor(palette, "#1a3a5a", -1))
-eq("custom steps onto palette", "#1a3a5a", M.stepColor(palette, "#abcdef", 1))
-eq("color name", "Blue", M.colorName(palette, "#1A3A5A"))
+eq("light colors are far apart too", true, closest > 0.05)
+const projects = [{ n: 1, path: "~/a", color: "#003b63" }]
+eq("free color skips used", "#1a4311", M.freeColor(palette, projects, "#d8dee9", "#2e3440"))
+eq("free color skips poor ones", "#1a4311", M.freeColor([{ name: "x", color: "#2e3440" }].concat(palette), projects, "#d8dee9", "#2e3440"))
+eq("step right", "#1a4311", M.stepColor(palette, "#003b63", 1))
+eq("step left wraps", palette[palette.length - 1].color, M.stepColor(palette, "#003b63", -1))
+eq("custom steps onto palette", "#003b63", M.stepColor(palette, "#abcdef", 1))
+eq("color name", "Blue", M.colorName(palette, "#003B63"))
 eq("custom color name", "#abcdef", M.colorName(palette, "#abcdef"))
 
 console.log("model: text and suggestions")

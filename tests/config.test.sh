@@ -66,7 +66,7 @@ new_home
 mkdir -p "$HOME/code/shop" "$HOME/code/blog" "$HOME/code/api" "$HOME/My Projects/web app"
 h() { "$helper" "$@"; }
 ok "add first project" h add '~/code/shop'
-eq "file gets a header and the project" "~/code/shop             #1a3a5a" "$(grep -v '^#' "$conf" | grep .)"
+eq "file gets a header and the project" "~/code/shop             #003b63" "$(grep -v '^#' "$conf" | grep .)"
 ok "add with trailing slash" h add "$HOME/code/blog/"
 ok "add with explicit color" h add '~/code/api' '#ABCDEF'
 fails "duplicate folder" h add '~/code/shop'
@@ -74,10 +74,10 @@ fails "missing folder" h add '~/nope'
 fails "relative folder" h add 'code/shop'
 fails "bad color" h add '~/code/api' '#12'
 ok "folder with spaces" h add '~/My Projects/web app'
-eq "list" "1  Super+Ctrl+Alt+1  #1a3a5a  ~/code/shop
-2  Super+Ctrl+Alt+2  #213f12  ~/code/blog
+eq "list" "1  Super+Ctrl+Alt+1  #003b63  ~/code/shop
+2  Super+Ctrl+Alt+2  #1a4311  ~/code/blog
 3  Super+Ctrl+Alt+3  #abcdef  ~/code/api
-4  Super+Ctrl+Alt+4  #681e1e  ~/My Projects/web app" "$(h list | head -n 4)"
+4  Super+Ctrl+Alt+4  #5e2024  ~/My Projects/web app" "$(h list | head -n 4)"
 
 ok "move 3 up" h move 3 up
 eq "order after move" "~/code/api" "$(h list | sed -n 2p | awk '{print $4}')"
@@ -159,13 +159,13 @@ echo "config: colors for any terminal"
 new_home
 mkdir -p "$HOME/code/shop"
 h add '~/code/shop' > /dev/null
-eq "list shows the color keys" "Super+Ctrl+Alt+Shift+3  #681e1e  Red" "$(h list | grep -F 'Shift+3' | sed 's/^ *//')"
+eq "list shows the color keys" "Super+Ctrl+Alt+Shift+3  #5e2024  Red" "$(h list | grep -F 'Shift+3' | sed 's/^ *//')"
 ok "set color 3" h paint-color 3 '#ABCDEF'
 ok "set color 1" h paint-color 1 '#111111'
 ok "set color 8" h paint-color 8 '#222222'
 ok "change color 3" h paint-color 3 '#333333'
 eq "one line each, in order, under a comment" \
-  "~/code/shop             #1a3a5a||# Super+Ctrl+Alt+Shift+1…8 color the terminal you are in; +0 takes the color away.|paint-1 = #111111|paint-3 = #333333|paint-8 = #222222" \
+  "~/code/shop             #003b63||# Super+Ctrl+Alt+Shift+1…8 color the terminal you are in; +0 takes the color away.|paint-1 = #111111|paint-3 = #333333|paint-8 = #222222" \
   "$(grep -v '^# [CT]' "$conf" | sed 1d | paste -sd '|')"
 eq "list names a custom color" "Super+Ctrl+Alt+Shift+3  #333333  your color" "$(h list | grep -F 'Shift+3' | sed 's/^ *//')"
 eq "state has the custom colors" '{"1":"#111111","3":"#333333","8":"#222222"}' "$("$helper" state | jq -c .paint)"
@@ -177,16 +177,16 @@ ok "back to default" h paint-color 1 default
 ok "default twice is fine" h paint-color 1 default
 ok "back to default" h paint-color 3 default
 ok "back to default" h paint-color 8 default
-eq "the comment goes with the last one, file as before" "# Colorful Terminals: one project per line, the folder and then its color.|# The 1st project opens with Super+Ctrl+Alt+1, the 2nd with Super+Ctrl+Alt+2, up to 9.|# Colors are #rrggbb. Edit here or in the panel (Super+Ctrl+Alt+0); both stay in sync.||~/code/shop             #1a3a5a" \
+eq "the comment goes with the last one, file as before" "# Colorful Terminals: one project per line, the folder and then its color.|# The 1st project opens with Super+Ctrl+Alt+1, the 2nd with Super+Ctrl+Alt+2, up to 9.|# Colors are #rrggbb. Edit here or in the panel (Super+Ctrl+Alt+0); both stay in sync.||~/code/shop             #003b63" \
   "$(paste -sd '|' "$conf")"
 printf 'paint-9 = #111111\npaint-2 = blue\n' >> "$conf"
 eq "bad color lines are problems" "paint-9 = #111111|paint-2 = blue" "$("$helper" state | jq -r '[.problems[].text] | join("|")')"
-eq "a project color is untouched by all this" "1  Super+Ctrl+Alt+1  #1a3a5a  ~/code/shop" "$(h list | head -n 1)"
+eq "a project color is untouched by all this" "1  Super+Ctrl+Alt+1  #003b63  ~/code/shop" "$(h list | head -n 1)"
 mkdir -p "$HOME/.local/state/omarchy/current/theme"
 printf 'accent = "#000000"\nbackground = "#faf4ed"\n' > "$HOME/.local/state/omarchy/current/theme/colors.toml"
-eq "a light theme gets the light palette by default" "Super+Ctrl+Alt+Shift+1  #c3d9f7  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
+eq "a light theme gets the light palette by default" "Super+Ctrl+Alt+Shift+1  #aedbfb  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
 printf 'background = "#1a1b26"\n' > "$HOME/.local/state/omarchy/current/theme/colors.toml"
-eq "a dark theme the dark one" "Super+Ctrl+Alt+Shift+1  #1a3a5a  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
+eq "a dark theme the dark one" "Super+Ctrl+Alt+Shift+1  #003b63  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
 
 echo "config: the color keys"
 # A stand-in Hyprland: the focused window's tags, and a key press that a shell
@@ -223,7 +223,7 @@ ok "no notification when it worked" test ! -e "$HOME/notified"
 ok "0 takes the color away" paint 0
 eq "as a reset" "reset" "$(cat "$HOME/request")"
 ok "a default color" paint 7
-eq "is the palette's" "#262e82" "$(cat "$HOME/request")"
+eq "is the palette's" "#572142" "$(cat "$HOME/request")"
 fails "no key 9" paint 9
 fails "no key 10" paint 10
 FAKE_SHELL=busy fails "a terminal that does not answer" paint 1

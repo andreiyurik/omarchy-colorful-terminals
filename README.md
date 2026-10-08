@@ -75,7 +75,7 @@ A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when 
 |---|---|
 | `↑` `↓` | Move between projects |
 | `←` `→` | Change the project's color |
-| `C` or `#` | Type a custom color, like `#1a3a5a`, with a live preview |
+| `C` or `#` | Type a custom color, like `#003b63`, with a live preview |
 | `Shift+↑` `Shift+↓` | Move it up or down; this changes its key number |
 | `Enter` | Open the project |
 | `Del` | Remove it (**Undo** or `Ctrl+Z` puts it back) |
@@ -87,18 +87,20 @@ On the **Any terminal** row, `←` `→` go from key to key, `Shift+←` `Shift+
 
 ## Default colors
 
-Eight hues around the color wheel, all at the same low brightness: far enough apart to tell at a glance, dark enough that your theme's text stays readable on every stock Omarchy theme (contrast 4.8 or better on all 22). A new project gets the first color no other project uses. The color keys use the same eight, in the same order.
+Seven hues spaced around the color wheel at one lightness, placed so that the two closest are as far apart as the wheel allows, plus black. Your theme's text reads on every one of them on every stock Omarchy theme, and each stands off the theme's own background. There is no yellow on purpose: at this darkness yellow turns olive and blends into green and orange. The order is by use, not by hue: red for production is a terminal convention, so it is key 3, not key 1. A new project gets the first color no other project uses, and the color keys use the same eight in the same order.
+
+On the four near-black themes (vantablack, matte-black, last-horizon, solitude) black is the theme's own background, and the panel marks it so. Light themes get pale tints of the same hues, with a neutral gray in black's place, because white would vanish into most light backgrounds.
 
 | Key | Dark themes | | Light themes | |
 |:-:|---|---|---|---|
-| 1 | ![](https://img.shields.io/badge/-%20%20%20%20-1a3a5a) Blue | `#1a3a5a` | ![](https://img.shields.io/badge/-%20%20%20%20-c3d9f7) Blue | `#c3d9f7` |
-| 2 | ![](https://img.shields.io/badge/-%20%20%20%20-213f12) Green | `#213f12` | ![](https://img.shields.io/badge/-%20%20%20%20-d4edbf) Green | `#d4edbf` |
-| 3 | ![](https://img.shields.io/badge/-%20%20%20%20-681e1e) Red | `#681e1e` | ![](https://img.shields.io/badge/-%20%20%20%20-f7c9c9) Red | `#f7c9c9` |
-| 4 | ![](https://img.shields.io/badge/-%20%20%20%20-4c2276) Violet | `#4c2276` | ![](https://img.shields.io/badge/-%20%20%20%20-dccbf8) Violet | `#dccbf8` |
-| 5 | ![](https://img.shields.io/badge/-%20%20%20%20-621d4b) Plum | `#621d4b` | ![](https://img.shields.io/badge/-%20%20%20%20-f8cce9) Pink | `#f8cce9` |
-| 6 | ![](https://img.shields.io/badge/-%20%20%20%20-4c3316) Brown | `#4c3316` | ![](https://img.shields.io/badge/-%20%20%20%20-f5cda6) Peach | `#f5cda6` |
-| 7 | ![](https://img.shields.io/badge/-%20%20%20%20-262e82) Indigo | `#262e82` | ![](https://img.shields.io/badge/-%20%20%20%20-eeeea0) Lemon | `#eeeea0` |
-| 8 | ![](https://img.shields.io/badge/-%20%20%20%20-13402a) Jade | `#13402a` | ![](https://img.shields.io/badge/-%20%20%20%20-bdeed8) Mint | `#bdeed8` |
+| 1 | ![](https://img.shields.io/badge/-%20%20%20%20-003b63) Blue | `#003b63` | ![](https://img.shields.io/badge/-%20%20%20%20-aedbfb) Blue | `#aedbfb` |
+| 2 | ![](https://img.shields.io/badge/-%20%20%20%20-1a4311) Green | `#1a4311` | ![](https://img.shields.io/badge/-%20%20%20%20-bedfb7) Green | `#bedfb7` |
+| 3 | ![](https://img.shields.io/badge/-%20%20%20%20-5e2024) Red | `#5e2024` | ![](https://img.shields.io/badge/-%20%20%20%20-fcc4c3) Red | `#fcc4c3` |
+| 4 | ![](https://img.shields.io/badge/-%20%20%20%20-3c2c61) Purple | `#3c2c61` | ![](https://img.shields.io/badge/-%20%20%20%20-d3cefd) Purple | `#d3cefd` |
+| 5 | ![](https://img.shields.io/badge/-%20%20%20%20-582a00) Orange | `#582a00` | ![](https://img.shields.io/badge/-%20%20%20%20-f3cca8) Peach | `#f3cca8` |
+| 6 | ![](https://img.shields.io/badge/-%20%20%20%20-00454a) Teal | `#00454a` | ![](https://img.shields.io/badge/-%20%20%20%20-a1e2e5) Aqua | `#a1e2e5` |
+| 7 | ![](https://img.shields.io/badge/-%20%20%20%20-572142) Magenta | `#572142` | ![](https://img.shields.io/badge/-%20%20%20%20-f3c4e2) Pink | `#f3c4e2` |
+| 8 | ![](https://img.shields.io/badge/-%20%20%20%20-000000) Black | `#000000` | ![](https://img.shields.io/badge/-%20%20%20%20-d9d9d9) Gray | `#d9d9d9` |
 
 On a light theme the panel offers the light palette and marks any color picked for a dark one. A custom color is a hex code away (`C` in the panel), and the panel tells you if the theme's text would be hard to read on it or if it looks the same as the theme background.
 
@@ -108,9 +110,9 @@ Everything lives in one file you can also edit by hand: `~/.config/colorful-term
 
 ```
 # folder                color
-~/code/shop             #1a3a5a
-~/code/blog             #213f12     # anything after " # " is a comment
-~/work/api-gateway      #681e1e
+~/code/shop             #003b63
+~/code/blog             #1a4311     # anything after " # " is a comment
+~/work/api-gateway      #5e2024
 paint-3 = #5a1a3a                   # your own color on Super+Ctrl+Alt+Shift+3
 ```
 

@@ -27,7 +27,12 @@ if have lua; then
 else
   echo "== keys: SKIP (needs lua)"
 fi
-if have node; then run model node tests/model.test.js; else echo "== model: SKIP (needs node)"; fi
+if have node; then
+  run model node tests/model.test.js
+  run palette node tests/palette.test.js
+else
+  echo "== model, palette: SKIP (needs node)"
+fi
 if have omarchy; then run manifest omarchy plugin validate .; fi
 run panel tests/render-panel
 run panel-runtime tests/panel-runtime

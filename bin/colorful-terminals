@@ -19,13 +19,19 @@ backup_dir="$config_dir/backup"
 max_keys=9
 paint_keys=8   # Super+Ctrl+Alt+Shift+1…8 color the focused terminal
 
-# Eight hues around the color wheel at the same low brightness: far enough apart
-# to tell at a glance, dark enough for light text on every dark Omarchy theme.
-palette_names=(Blue Green Red Violet Plum Brown Indigo Jade)
-palette_colors=("#1a3a5a" "#213f12" "#681e1e" "#4c2276" "#621d4b" "#4c3316" "#262e82" "#13402a")
-# The same idea for light themes: pale tints that keep dark text readable.
-light_names=(Blue Green Red Violet Pink Peach Lemon Mint)
-light_colors=("#c3d9f7" "#d4edbf" "#f7c9c9" "#dccbf8" "#f8cce9" "#f5cda6" "#eeeea0" "#bdeed8")
+# Seven hues spaced around the OKLCH color wheel at one lightness (L 0.34) and
+# one chroma (0.09), placed so the two closest colors are as far apart as the
+# wheel allows, plus black. Every stock Omarchy theme's text reads on each
+# (contrast 5.1 or better), and each stands off every dark theme background.
+# The order is by use, not by hue: red for production is a terminal convention.
+# tests/palette.test.js checks all of this against the 22 stock themes.
+# Ordered by key: Super+Ctrl+Alt+Shift+1 is Blue. Same names in hypr/keys.lua.
+palette_names=(Blue Green Red Purple Orange Teal Magenta Black)
+palette_colors=("#003b63" "#1a4311" "#5e2024" "#3c2c61" "#582a00" "#00454a" "#572142" "#000000")
+# The same for light themes (L 0.87, chroma 0.065), with a neutral gray in
+# black's place: white would vanish into most light theme backgrounds.
+light_names=(Blue Green Red Purple Peach Aqua Pink Gray)
+light_colors=("#aedbfb" "#bedfb7" "#fcc4c3" "#d3cefd" "#f3cca8" "#a1e2e5" "#f3c4e2" "#d9d9d9")
 
 usage() {
   cat <<EOF

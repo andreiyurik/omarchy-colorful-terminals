@@ -61,8 +61,8 @@ end
 
 -- The palette on Super+Ctrl+Alt+Shift+1…8, the same as bin/colorful-terminals
 -- (tests/keys.test.lua checks they agree): names for the keybindings list.
-M.palette = { "Blue", "Green", "Red", "Violet", "Plum", "Brown", "Indigo", "Jade" }
-M.palette_light = { "Blue", "Green", "Red", "Violet", "Pink", "Peach", "Lemon", "Mint" }
+M.palette = { "Blue", "Green", "Red", "Purple", "Orange", "Teal", "Magenta", "Black" }
+M.palette_light = { "Blue", "Green", "Red", "Purple", "Peach", "Aqua", "Pink", "Gray" }
 
 -- Omarchy's current theme is light when its background is: the same test as
 -- the helper's theme_is_light.

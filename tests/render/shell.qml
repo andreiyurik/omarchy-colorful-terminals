@@ -11,14 +11,14 @@ ShellRoot {
   readonly property string outDir: Quickshell.env("CT_RENDER_DIR")
 
   readonly property var palette: [
-    { name: "Blue", color: "#1a3a5a" }, { name: "Green", color: "#213f12" }, { name: "Red", color: "#681e1e" },
-    { name: "Violet", color: "#4c2276" }, { name: "Plum", color: "#621d4b" }, { name: "Brown", color: "#4c3316" },
-    { name: "Indigo", color: "#262e82" }, { name: "Jade", color: "#13402a" }
+    { name: "Blue", color: "#003b63" }, { name: "Green", color: "#1a4311" }, { name: "Red", color: "#5e2024" },
+    { name: "Purple", color: "#3c2c61" }, { name: "Orange", color: "#582a00" }, { name: "Teal", color: "#00454a" },
+    { name: "Magenta", color: "#572142" }, { name: "Black", color: "#000000" }
   ]
   readonly property var paletteLight: [
-    { name: "Blue", color: "#c3d9f7" }, { name: "Green", color: "#d4edbf" }, { name: "Red", color: "#f7c9c9" },
-    { name: "Violet", color: "#dccbf8" }, { name: "Pink", color: "#f8cce9" }, { name: "Peach", color: "#f5cda6" },
-    { name: "Lemon", color: "#eeeea0" }, { name: "Mint", color: "#bdeed8" }
+    { name: "Blue", color: "#aedbfb" }, { name: "Green", color: "#bedfb7" }, { name: "Red", color: "#fcc4c3" },
+    { name: "Purple", color: "#d3cefd" }, { name: "Peach", color: "#f3cca8" }, { name: "Aqua", color: "#a1e2e5" },
+    { name: "Pink", color: "#f3c4e2" }, { name: "Gray", color: "#d9d9d9" }
   ]
   readonly property var bashFiles: [
     { file: "~/.bashrc", what: "bash: colors terminals as you cd" },
@@ -45,8 +45,8 @@ ShellRoot {
   // A binding of the user's own on a project key; Omarchy has none there.
   readonly property var ownBinding: [{ digit: 2, description: "Open my notes", byCode: false }]
   readonly property var fourProjects: [
-    project(1, "~/code/shop", "#1a3a5a"), project(2, "~/code/blog", "#213f12"),
-    project(3, "~/work/api-gateway", "#681e1e"), project(4, "~/work/api-gateway/admin", "#4c2276")
+    project(1, "~/code/shop", "#003b63"), project(2, "~/code/blog", "#1a4311"),
+    project(3, "~/work/api-gateway", "#5e2024"), project(4, "~/work/api-gateway/admin", "#3c2c61")
   ]
   readonly property string previewText: "~/.bashrc  (at the end)\n    # BEGIN colorful-terminals (...)\n    if [[ -r \"$HOME\"/.config/omarchy/plugins/andreiyurik.colorful-terminals/shell/colorful-terminals.bash ]]; then source ...; fi\n    # END colorful-terminals\n\n~/.config/hypr/hyprland.lua  (at the end)\n    -- BEGIN colorful-terminals (...)\n    do local dir = os.getenv(\"HOME\") .. \"/.config/omarchy/plugins/andreiyurik.colorful-terminals\"; ... end\n    -- END colorful-terminals"
   readonly property var noScan: ({ currentDir: "", repos: [], conflicts: [] })
@@ -62,14 +62,14 @@ ShellRoot {
     { name: "add", mode: "add", query: "~/co", dirs: ["~/code", "~/company"],
       config: config(fourProjects.slice(0, 3)), scan: { currentDir: "~/code/shop", repos: ["~/code/shop"], conflicts: [] } },
     { name: "hex", mode: "hex", select: 0,
-      config: config([project(1, "~/code/shop", "#9aa0a6"), project(2, "~/old/gone", "#213f12", false)]), scan: noScan },
+      config: config([project(1, "~/code/shop", "#9aa0a6"), project(2, "~/old/gone", "#1a4311", false)]), scan: noScan },
     { name: "missing", select: 1,
-      config: config([project(1, "~/code/shop", "#1a3a5a"), project(2, "~/old/gone", "#213f12", false)]), scan: noScan },
+      config: config([project(1, "~/code/shop", "#003b63"), project(2, "~/old/gone", "#1a4311", false)]), scan: noScan },
     { name: "undo", select: 0, undo: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
     { name: "turn-off", confirm: true, config: config(fourProjects.slice(0, 3)), scan: noScan },
     { name: "own-binding", select: 0, config: config(fourProjects.slice(0, 3)), scan: { currentDir: "", repos: [], conflicts: ownBinding } },
-    { name: "light", select: 0, light: true, config: config([project(1, "~/code/shop", "#c3d9f7"), project(2, "~/code/blog", "#d4edbf"),
-      project(3, "~/work/api-gateway", "#681e1e")]), scan: noScan },
+    { name: "light", select: 0, light: true, config: config([project(1, "~/code/shop", "#aedbfb"), project(2, "~/code/blog", "#bedfb7"),
+      project(3, "~/work/api-gateway", "#5e2024")]), scan: noScan },
     { name: "paint", paint: 3, config: config(fourProjects.slice(0, 2), { paint: { "3": "#5a1a3a" } }),
       scan: { currentDir: "", repos: [], conflicts: [{ digit: 5, description: "Screenshot to clipboard", byCode: true, shift: true }] } },
     { name: "paint-hex", paint: 2, mode: "hex", config: config(fourProjects.slice(0, 2)), scan: noScan }
@@ -136,15 +136,15 @@ ShellRoot {
   function checkKeys() {
     test.load(test.scenario("main"))
     view.selected = 1
-    test.check("right arrow picks the next color", "color 2 #681e1e", key(Qt.Key_Right))
-    test.check("the new color shows at once", "#681e1e", rowTint(1))
-    test.check("left arrow steps back from what is shown", "color 2 #213f12", key(Qt.Key_Left))
+    test.check("right arrow picks the next color", "color 2 #5e2024", key(Qt.Key_Right))
+    test.check("the new color shows at once", "#5e2024", rowTint(1))
+    test.check("left arrow steps back from what is shown", "color 2 #1a4311", key(Qt.Key_Left))
     test.check("shift+down moves the project", "move 2 down", key(Qt.Key_Down, { modifiers: Qt.ShiftModifier }))
     test.check("selection follows the move", 2, view.selected)
     view.selected = 1
     test.check("delete removes", "remove 2", key(Qt.Key_Delete))
     test.check("undo is offered", true, view.undo !== null)
-    test.check("ctrl+z puts it back in place", "add ~/code/blog #213f12 --at 2", key(Qt.Key_Z, { modifiers: Qt.ControlModifier }))
+    test.check("ctrl+z puts it back in place", "add ~/code/blog #1a4311 --at 2", key(Qt.Key_Z, { modifiers: Qt.ControlModifier }))
     view.busy = true
     view.lastRun = null
     view.handleListKey({ key: Qt.Key_Delete, modifiers: 0, text: "", nativeScanCode: 0 })
@@ -182,12 +182,12 @@ ShellRoot {
     test.check("bad custom color is refused", true, view.error !== "")
     test.check("good custom color is saved", "color 1 #abcdef", (view.lastRun = null, view.applyHex("ABCDEF"), view.lastRun))
     view.startAdd()
-    test.check("adding a new folder gets a free color", "add ~/code/new #621d4b", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
+    test.check("adding a new folder gets a free color", "add ~/code/new #582a00", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
     view.startAdd()
     test.check("an existing project is not added twice", null, (view.lastRun = null, view.addFolder("~/code/shop"), view.lastRun))
     view.startAdd()
     view.query = "Ё.code"
-    test.check("a path typed on the Russian layout is added", "add ~/code #621d4b", (view.lastRun = null, view.addHighlighted(), view.lastRun))
+    test.check("a path typed on the Russian layout is added", "add ~/code #582a00", (view.lastRun = null, view.addHighlighted(), view.lastRun))
 
     test.load(test.scenario("setup"))
     test.check("readable colors are not flagged", false, view.colorsNeedWork)
@@ -198,13 +198,13 @@ ShellRoot {
     test.check("a binding of your own on a project key is named", 1, view.conflicts.length)
 
     test.load(test.scenario("light"))
-    test.check("a light theme gets the light palette", "#c3d9f7", view.palette[0].color)
-    test.check("a new project gets a light color", "add ~/code/new #f7c9c9", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
+    test.check("a light theme gets the light palette", "#aedbfb", view.palette[0].color)
+    test.check("a new project gets a light color", "add ~/code/new #fcc4c3", (view.lastRun = null, view.addFolder("~/code/new"), view.lastRun))
     test.check("only the dark color is flagged", true, view.colorsNeedWork)
 
     test.load(test.scenario("paint"))
     test.check("the color keys are one stop for the cursor", "paint", view.target)
-    test.check("their colors: yours, else the palette's", ["#1a3a5a", "#213f12", "#5a1a3a", "#4c2276"], view.paintColors.slice(0, 4))
+    test.check("their colors: yours, else the palette's", ["#003b63", "#1a4311", "#5a1a3a", "#3c2c61"], view.paintColors.slice(0, 4))
     test.check("a color key of someone else's is named", 1, view.conflicts.length)
     test.check("right arrow goes to the next key", 4, (key(Qt.Key_Right), view.paintSlot))
     test.check("and saves nothing", null, key(Qt.Key_Right))
@@ -212,10 +212,10 @@ ShellRoot {
     test.check("going from key to key works while saving", 6, (key(Qt.Key_Right), view.paintSlot))
     view.busy = false
     view.paintSlot = 3
-    test.check("shift+right gives the key the next palette color", "paint-color 3 #1a3a5a", key(Qt.Key_Right, { modifiers: Qt.ShiftModifier }))
-    test.check("shown at once", "#1a3a5a", view.paintColors[2])
+    test.check("shift+right gives the key the next palette color", "paint-color 3 #003b63", key(Qt.Key_Right, { modifiers: Qt.ShiftModifier }))
+    test.check("shown at once", "#003b63", view.paintColors[2])
     test.check("the palette's own color for a key is its default", "paint-color 1 default",
-      (view.lastRun = null, view.setPaintColor(1, "#1a3a5a"), view.settled(), view.lastRun))
+      (view.lastRun = null, view.setPaintColor(1, "#003b63"), view.settled(), view.lastRun))
     view.paintSlot = 3
     test.check("delete puts a key back to its default", "paint-color 3 default", key(Qt.Key_Delete))
     test.check("a digit picks a key here", 7, (key(Qt.Key_7), view.paintSlot))

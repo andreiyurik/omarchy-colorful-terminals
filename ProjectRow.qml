@@ -244,7 +244,7 @@ CursorSurface {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           leftPadding: Style.space(8)
-          text: row.view.hexPreview === "" ? "Like #1a3a5a" : row.issue
+          text: row.view.hexPreview === "" ? "Like #003b63" : row.issue
           color: row.view.hexPreview === "" ? row.view.dim : row.view.urgent
           font.family: row.view.fontFamily
           font.pixelSize: Style.font.caption
