@@ -1,9 +1,11 @@
 # Colorful Terminals for fish: tints the terminal background by project folder.
 # Loaded from ~/.config/fish/conf.d/colorful-terminals.fish. Before each
 # prompt it checks the current folder against
-# ~/.config/colorful-terminals/projects.conf and, only when the color should
-# change, sends OSC 11 (set background) or OSC 111 (back to the theme).
-# Inside tmux it colors the tmux pane instead.
+# ~/.config/colorful-terminals/projects.conf and sends OSC 11 (set background)
+# or, when leaving a project, OSC 111 (back to the theme). A color is sent
+# again at every prompt, so a terminal that reloaded its config (a theme
+# switch) is back in its color at the next prompt. Inside tmux it colors the
+# tmux pane instead, which keeps its style, so there it is set once.
 #
 # Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own (see
 # the bash hook): Hyprland presses Ctrl+Alt+Shift+F12, which runs __ct_key.
@@ -94,7 +96,9 @@ or return 0
 function __ct_prompt --on-event fish_prompt
     set -l color $__ct_paint
     test -n "$color"; or set color (__ct_color_for $PWD)
-    if test "$color" != "$__ct_shown"
+    set -l in_tmux 0
+    set -q TMUX; and set -q TMUX_PANE; and set in_tmux 1
+    if test "$color" != "$__ct_shown"; or test -n "$color" -a $in_tmux -eq 0
         __ct_apply "$color"
         set -g __ct_shown "$color"
     end

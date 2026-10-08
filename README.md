@@ -42,6 +42,8 @@ To update: `omarchy plugin update andreiyurik.colorful-terminals`, then `omarchy
 | `Super+Ctrl+Alt+Shift+1` … `Super+Ctrl+Alt+Shift+8` | Give the terminal you are in color 1…8 |
 | `Super+Ctrl+Alt+Shift+0` | Take that color away: back to the project or theme color |
 
+Omarchy's own keybindings list (`Super+K`) shows them all, each project key with its folder name and each color key with its color.
+
 A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when you `cd` into a project and goes away with `Super+Ctrl+Alt+Shift+0` or when the terminal closes. It is always the terminal you are in, even when one terminal program draws all your windows, because the shell in that terminal does the coloring: Hyprland passes the key to the focused window. So it works at a shell prompt; if a program is running there, a notification says so and nothing changes.
 
 In the panel:
@@ -119,7 +121,7 @@ Your project list and the backups stay in `~/.config/colorful-terminals/`. Delet
 
 ## Limitations
 
-- **The color changes at the next prompt.** It switches when a command finishes and the shell draws its prompt, not in the middle of a running script.
+- **The color changes at the next prompt.** It switches when a command finishes and the shell draws its prompt, not in the middle of a running script. The same goes for a theme switch: a terminal that reloads its config is back in its color at the next prompt.
 - **bash, zsh and fish**, in terminals that support the standard OSC 11 background code: Ghostty, Kitty, Alacritty and foot all do. Inside tmux the tmux pane takes the color instead. Not inside zellij.
 - **Terminals opened before you turn it on** get colors once you open them again; their shell has not loaded the hook yet.
 - **The `Super+Ctrl+Alt+Shift` keys work at a shell prompt.** While a program runs in the terminal (an editor, `btop`, `ssh`), the shell cannot answer, so the color stays and a notification says why.

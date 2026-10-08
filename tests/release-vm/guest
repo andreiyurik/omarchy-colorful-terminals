@@ -41,7 +41,7 @@ shot() { grim "$shots/$1.png"; }
 binds() { hyprctl binds 2> /dev/null; }
 has_bind() { binds | grep -qF "$1"; }
 project_key_bound() { binds | awk '/^bind/{m=k=""} /modmask: 76/{m=1} /key: SUPER \+ CTRL \+ ALT \+ code:10/{k=1} /description: Project 1: demo/{if(m&&k)f=1} END{exit !f}'; }
-color_key_bound() { binds | awk '/^bind/{m=""} /modmask: 77/{m=1} /description: Terminal color 1$/{if(m)f=1} END{exit !f}'; }
+color_key_bound() { binds | awk '/^bind/{m=""} /modmask: 77/{m=1} /description: Terminal color 1: /{if(m)f=1} END{exit !f}'; }
 no_project_keys() { ! binds | grep -q 'description: Project [1-9]'; }
 in_bar() { jq -e --arg id "$id" '[.bar.layout[][]?.id] | index($id)' "$HOME/.config/omarchy/shell.json"; }
 not_in_bar() { ! in_bar; }

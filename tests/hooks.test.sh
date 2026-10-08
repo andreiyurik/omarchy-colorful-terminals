@@ -74,12 +74,15 @@ rm "$conf"
 
 # Runs <shell command> in a pseudo-terminal, feeding it <input>, and prints the
 # OSC 11/111 codes it drew, in order. The input waits for the first prompt.
+# A color is sent again at every prompt (see the hooks), so osc_codes gives
+# the changes only; osc_raw gives every code.
 type_into() { sleep 1; printf '%s\nexit\n' "$1"; }
-osc_codes() {
+osc_raw() {
   local command=$1 input=$2
   type_into "$input" | TERM=xterm-256color script -q -e -c "$command" /dev/null 2>&1 |
-    grep -aoE $'\x1b\\]11;#[0-9a-fA-F]{6}\x07|\x1b\\]111\x07' | sed $'s/\x1b\\]//; s/\x07//' | paste -sd ' '
+    grep -aoE $'\x1b\\]11;#[0-9a-fA-F]{6}\x07|\x1b\\]111\x07' | sed $'s/\x1b\\]//; s/\x07//'
 }
+osc_codes() { osc_raw "$@" | uniq | paste -sd ' '; }
 
 project_home() {
   omarchy_like_home
@@ -93,6 +96,12 @@ omarchy_like_home() {
 }
 walk=$'cd ~/code/shop/src\ncd ~/code/shop/admin\ncd ~/code/shop\ncd /'
 expected="11;#1a3a5a 11;#681e1e 11;#1a3a5a 111"
+# A terminal that reloaded its config (a theme switch) is back in its color at
+# the next prompt: the color goes out again with every prompt.
+check_resend() {   # <name> <shell command>
+  ok "$1: sends the color again at every prompt" \
+    test "$(osc_raw "$2" $'cd ~/code/shop/src\ntrue\ntrue' | grep -c '11;#1a3a5a')" -ge 3
+}
 
 # The helper adds zsh and fish blocks only when it finds those shells.
 shells_bin=$(mktemp -d)
@@ -117,7 +126,7 @@ else
   "$helper" integration install --yes > /dev/null
   out=$(type_into $'cd ~/code/shop/src\nfalse' | TERM=xterm-256color script -q -e -c "$(bash_i)" /dev/null 2>&1)
   eq "bash: colors beside another prompt hook" "11;#1a3a5a" \
-    "$(grep -aoE $'\x1b\\]11;#[0-9a-f]{6}' <<< "$out" | sed $'s/\x1b\\]//' | paste -sd ' ')"
+    "$(grep -aoE $'\x1b\\]11;#[0-9a-f]{6}' <<< "$out" | sed $'s/\x1b\\]//' | uniq | paste -sd ' ')"
   ok "bash: the other hook still runs" test "$(count_mine "$out")" -ge 3
   ok "bash: and still sees \$? of the command" grep -aq '<mine:1>' <<< "$out"
   if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)); then
@@ -128,12 +137,16 @@ else
     ok "bash 5.1+: PROMPT_COMMAND as an array keeps every entry" test "$(grep -ac '<two>' <<< "$out")" -ge 1
     ok "bash 5.1+: and colors" grep -aq $'\x1b\\]11;#1a3a5a' <<< "$out"
   fi
+  project_home
+  "$helper" integration install --yes > /dev/null
+  check_resend "bash" "$(bash_i)"
 
   if [[ -n $zsh ]]; then
     project_home
     : > "$HOME/.zshrc"
     "$helper" integration install --yes > /dev/null
     eq "zsh: colors follow cd" "$expected" "$(osc_codes "$(zsh_i)" "$walk")"
+    check_resend "zsh" "$(zsh_i)"
     eq "zsh: sourcing twice keeps one hook" "1" \
       "$(type_into $'source ~/.zshrc\nsource ~/.zshrc\nprint hooks=${#${(M)precmd_functions:#_ct_precmd}}' |
         TERM=xterm-256color script -q -e -c "$(zsh_i)" /dev/null 2>&1 | grep -ao 'hooks=[0-9]*' | tail -n 1 | cut -d= -f2)"
@@ -156,6 +169,7 @@ else
     mkdir -p "$HOME/.config/fish"
     "$helper" integration install --yes > /dev/null
     eq "fish: colors follow cd" "$expected" "$(osc_codes "$(fish_i)" "$walk")"
+    check_resend "fish" "$(fish_i)"
     out=$(type_into $'cd ~/code/shop\nfalse\necho "status=$status"' |
       TERM=xterm-256color script -q -e -c "$(fish_i)" /dev/null 2>&1)
     ok "fish: keeps \$status" grep -aq 'status=1' <<< "$out"

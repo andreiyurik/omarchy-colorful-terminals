@@ -113,7 +113,7 @@ CursorSurface {
           width: parent.width
           elide: Text.ElideMiddle
           text: row.exists
-            ? Model.plain(Model.parentOf(row.path), 160)
+            ? Model.plain(Model.rowSubtitle(row.n, row.path), 180)
             : "Folder not found · " + Model.plain(row.path, 160)
           color: row.exists ? row.view.dim : row.view.urgent
           font.family: row.view.fontFamily

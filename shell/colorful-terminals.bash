@@ -1,9 +1,12 @@
 # shellcheck shell=bash
 # Colorful Terminals: tints the terminal background by project folder.
 # Sourced from ~/.bashrc. Before each prompt it checks the current folder
-# against ~/.config/colorful-terminals/projects.conf and, only when the color
-# should change, sends OSC 11 (set background) or OSC 111 (back to the theme).
-# Inside tmux it colors the tmux pane instead, which tmux keeps per pane.
+# against ~/.config/colorful-terminals/projects.conf and sends OSC 11 (set
+# background) or, when leaving a project, OSC 111 (back to the theme). A
+# color is sent again at every prompt, so a terminal that reloaded its config
+# (Omarchy's theme switch signals Ghostty and Kitty, and Alacritty watches its
+# file) is back in its color at the next prompt. Inside tmux it colors the
+# tmux pane instead, which tmux keeps per pane, so there it is set only once.
 #
 # Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own, which
 # wins over project colors until Super+Ctrl+Alt+Shift+0 or the shell exits:
@@ -43,7 +46,7 @@ _ct_show() {
     _ct_match_dir "$PWD"
     want=$_ct_match
   fi
-  if [[ $want != "$_ct_shown" ]]; then
+  if [[ $want != "$_ct_shown" ]] || [[ -n $want && ( -z ${TMUX-} || -z ${TMUX_PANE-} ) ]]; then
     _ct_apply "$want"
     _ct_shown=$want
   fi

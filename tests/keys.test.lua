@@ -51,13 +51,14 @@ eq("nine project keys, the panel key, nine color keys", 19, #binds)
 eq("keys by keycode, clear of Omarchy's", "SUPER + CTRL + ALT + code:10", binds[1].keys)
 eq("named after the folder", "Project 1: shop", binds[1].description)
 eq("trailing slash ignored", "Project 2: blog", binds[2].description)
-eq("free slot says what it does", "Project 3 (not set, opens Colorful Terminals)", binds[3].description)
+eq("free slot says what it does", "Project 3: not set (opens Colorful Terminals)", binds[3].description)
 eq("key 9", "SUPER + CTRL + ALT + code:18", binds[9].keys)
 eq("panel on 0", "SUPER + CTRL + ALT + code:19", binds[10].keys)
 eq("helper opens by number", "'" .. repo .. "/bin/colorful-terminals' open 1", binds[1].dispatcher)
 eq("nothing of Omarchy's is unbound", 0, #unbinds)
 eq("color keys add Shift", "SUPER + CTRL + ALT + SHIFT + code:10", binds[11].keys)
-eq("color key says what it is", "Terminal color 1", binds[11].description)
+eq("color key says what it is and names the color", "Terminal color 1: Blue", binds[11].description)
+eq("color 8 is named too", "Terminal color 8: Jade", binds[18].description)
 eq("color key runs the helper", "'" .. repo .. "/bin/colorful-terminals' paint 1", binds[11].dispatcher)
 eq("color 8", "SUPER + CTRL + ALT + SHIFT + code:17", binds[18].keys)
 eq("0 takes the color away", "SUPER + CTRL + ALT + SHIFT + code:19", binds[19].keys)
@@ -68,6 +69,43 @@ write("replace-group-keys = yes\n~/a  #111111\n")
 load()
 eq("an old replace-group-keys line changes nothing", 0, #unbinds)
 eq("and still binds every key", 19, #binds)
+
+print("keys: color names")
+local function descriptions_with(text)
+  write("~/a  #111111\n" .. text)
+  load()
+  return binds[13].description
+end
+eq("a changed color key shows its color", "Terminal color 3: #5a1a3a", descriptions_with("paint-3 = #5a1a3a\n"))
+eq("a bad color line keeps the palette name", "Terminal color 3: Red", descriptions_with("paint-3 = red\n"))
+local state = os.getenv("HOME") .. "/state"
+os.execute("mkdir -p '" .. state .. "/omarchy/current/theme'")
+local function with_theme(background, body)
+  local f = assert(io.open(state .. "/omarchy/current/theme/colors.toml", "w"))
+  f:write("[colors]\nbackground = \"" .. background .. "\"\nforeground = \"#000000\"\n")
+  f:close()
+  os.execute("rm -rf '" .. os.getenv("HOME") .. "/.local/state'")
+  os.execute("mkdir -p '" .. os.getenv("HOME") .. "/.local' && ln -s '" .. state .. "' '" .. os.getenv("HOME") .. "/.local/state'")
+  return body()
+end
+eq("a light theme names the light palette", "Terminal color 5: Pink",
+  with_theme("#eff1f5", function() write("~/a  #111111\n"); load(); return binds[15].description end))
+eq("a dark theme names the dark palette", "Terminal color 5: Plum",
+  with_theme("#1a1b26", function() write("~/a  #111111\n"); load(); return binds[15].description end))
+os.execute("rm -rf '" .. os.getenv("HOME") .. "/.local/state'")
+
+-- The names must stay the ones the helper uses.
+local function helper_array(name)
+  local f = assert(io.open(repo .. "/bin/colorful-terminals", "r"))
+  local text = f:read("a")
+  f:close()
+  local list = text:match("\n" .. name .. "=%(([^)]*)%)")
+  local out = {}
+  for word in list:gmatch("%S+") do out[#out + 1] = word end
+  return table.concat(out, " ")
+end
+eq("dark names match the helper", helper_array("palette_names"), table.concat(M.palette, " "))
+eq("light names match the helper", helper_array("light_names"), table.concat(M.palette_light, " "))
 
 os.remove(os.getenv("HOME") .. "/.config/colorful-terminals/projects.conf")
 load()

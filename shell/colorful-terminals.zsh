@@ -1,8 +1,10 @@
 # Colorful Terminals for zsh: tints the terminal background by project folder.
 # Sourced from ~/.zshrc. Before each prompt it checks the current folder
-# against ~/.config/colorful-terminals/projects.conf and, only when the color
-# should change, sends OSC 11 (set background) or OSC 111 (back to the theme).
-# Inside tmux it colors the tmux pane instead.
+# against ~/.config/colorful-terminals/projects.conf and sends OSC 11 (set
+# background) or, when leaving a project, OSC 111 (back to the theme). A
+# color is sent again at every prompt, so a terminal that reloaded its config
+# (a theme switch) is back in its color at the next prompt. Inside tmux it
+# colors the tmux pane instead, which keeps its style, so there it is set once.
 #
 # Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own (see
 # the bash hook): Hyprland presses Ctrl+Alt+Shift+F12, which runs _ct_key.
@@ -91,7 +93,7 @@ _ct_apply() {
 _ct_precmd() {
   local REPLY=$_ct_paint
   [[ -n $REPLY ]] || _ct_color_for "$PWD"
-  if [[ $REPLY != "$_ct_shown" ]]; then
+  if [[ $REPLY != "$_ct_shown" ]] || [[ -n $REPLY && ( -z ${TMUX-} || -z ${TMUX_PANE-} ) ]]; then
     _ct_apply "$REPLY"
     _ct_shown=$REPLY
   fi

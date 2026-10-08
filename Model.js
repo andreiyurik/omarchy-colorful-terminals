@@ -158,6 +158,14 @@ function parentOf(path) {
   return i === 0 ? "/" : p.substr(0, i)
 }
 
+// Under a project's name: its key, then the folder it sits in. The key is
+// what the row is for, so it is spelled out here and not only in the header.
+function rowSubtitle(n, path) {
+  var parent = parentOf(path)
+  if (n < 1 || n > MAX_KEYS) return parent
+  return parent ? keyLabel(n) + " · " + parent : keyLabel(n)
+}
+
 // Text typed on a Russian layout, read as the Latin keys under the same
 // fingers: "Ё." is "~/" and "ырщз" is "shop". Other text is returned as is.
 var RU = "йцукенгшщзхъфывапролджэячсмитьбюё"

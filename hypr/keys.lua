@@ -39,16 +39,52 @@ function M.parse_line(line)
   return "project", path, color:lower()
 end
 
+-- Projects in order, and the settings ("paint-3" = "#5a1a3a").
 function M.read(conf)
-  local projects = {}
+  local projects, settings = {}, {}
   local file = io.open(conf, "r")
-  if not file then return projects end
+  if not file then return projects, settings end
   for line in file:lines() do
     local kind, a, b = M.parse_line(line)
     if kind == "project" then projects[#projects + 1] = { path = a, color = b } end
+    if kind == "setting" then settings[a] = b:lower() end
   end
   file:close()
-  return projects
+  return projects, settings
+end
+
+-- The palette on Super+Ctrl+Alt+Shift+1…8, the same as bin/colorful-terminals
+-- (tests/keys.test.lua checks they agree): names for the keybindings list.
+M.palette = { "Blue", "Green", "Red", "Violet", "Plum", "Brown", "Indigo", "Jade" }
+M.palette_light = { "Blue", "Green", "Red", "Violet", "Pink", "Peach", "Lemon", "Mint" }
+
+-- Omarchy's current theme is light when its background is: the same test as
+-- the helper's theme_is_light.
+function M.theme_is_light()
+  local state = os.getenv("XDG_STATE_HOME") or ((os.getenv("HOME") or "") .. "/.local/state")
+  local file = io.open(state .. "/omarchy/current/theme/colors.toml", "r")
+  if not file then return false end
+  local hex
+  for line in file:lines() do
+    hex = line:match("^%s*background%s*=%s*\"?(#%x%x%x%x%x%x)")
+    if hex then break end
+  end
+  file:close()
+  if not hex then return false end
+  local function channel(c)
+    c = tonumber(c, 16) / 255
+    if c <= 0.03928 then return c / 12.92 end
+    return ((c + 0.055) / 1.055) ^ 2.4
+  end
+  local r, g, b = channel(hex:sub(2, 3)), channel(hex:sub(4, 5)), channel(hex:sub(6, 7))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.35
+end
+
+-- "Blue" for a key on its palette color, or the color itself when it was changed.
+function M.paint_name(n, settings, light)
+  local own = settings["paint-" .. n]
+  if own and own:match("^#%x%x%x%x%x%x$") then return own end
+  return (light and M.palette_light or M.palette)[n]
 end
 
 local function folder_name(path)
@@ -61,13 +97,15 @@ function M.setup(dir)
   local home = os.getenv("HOME") or ""
   local conf = home .. "/.config/colorful-terminals/projects.conf"
   local helper = o.shell_quote(dir .. "/bin/colorful-terminals")
-  local projects = M.read(conf)
+  local projects, settings = M.read(conf)
+  local light = M.theme_is_light()
 
+  -- No commas in a description: Omarchy's keybindings list cuts it there.
   for n = 1, 9 do
     local keys = "SUPER + CTRL + ALT + code:" .. tostring(n + 9)
     local project = projects[n]
     local description = project and ("Project " .. n .. ": " .. folder_name(project.path))
-      or ("Project " .. n .. " (not set, opens Colorful Terminals)")
+      or ("Project " .. n .. ": not set (opens Colorful Terminals)")
     o.bind(keys, description, helper .. " open " .. n)
   end
 
@@ -77,8 +115,8 @@ function M.setup(dir)
   -- The helper finds out whether a terminal is focused and hands it the color
   -- (see `colorful-terminals paint`); the colors are set in the panel.
   for n = 1, 8 do
-    o.bind("SUPER + CTRL + ALT + SHIFT + code:" .. tostring(n + 9), "Terminal color " .. n,
-      helper .. " paint " .. n)
+    o.bind("SUPER + CTRL + ALT + SHIFT + code:" .. tostring(n + 9),
+      "Terminal color " .. n .. ": " .. M.paint_name(n, settings, light), helper .. " paint " .. n)
   end
   o.bind("SUPER + CTRL + ALT + SHIFT + code:19", "Terminal color off", helper .. " paint 0")
 end

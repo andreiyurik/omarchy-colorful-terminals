@@ -22,7 +22,7 @@ run integration bash tests/integration.test.sh
 run hooks bash tests/hooks.test.sh
 if have lua; then
   home=$(mktemp -d)
-  run keys env HOME="$home" lua tests/keys.test.lua "$PWD"
+  run keys env -u XDG_STATE_HOME HOME="$home" lua tests/keys.test.lua "$PWD"
   rm -rf "$home"
 else
   echo "== keys: SKIP (needs lua)"
