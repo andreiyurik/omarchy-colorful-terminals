@@ -8,6 +8,7 @@
 #
 #   tests/release-vm/run            the test (installs Omarchy first if needed)
 #   tests/release-vm/run --reinstall   install Omarchy again, then the test
+#   tests/release-vm/run --demo        record demo.gif and demo.mp4 instead (needs ffmpeg)
 #
 # Needs docker, /dev/kvm and about 60 GB free. The first run downloads the
 # 6 GB ISO and installs Omarchy (up to 40 minutes); later runs take minutes.
@@ -41,5 +42,17 @@ docker build -q -t colorful-terminals-test:vm tests/release-vm > /dev/null || { 
 # Root inside the container, for ssh and QEMU; files go back to you on exit.
 docker run --rm --device /dev/kvm -e OWNER="$(id -u):$(id -g)" \
   -e OMARCHY_VERSION="$version" -e REINSTALL="$([[ ${1-} == --reinstall ]] && echo yes)" \
+  -e DEMO="$([[ ${1-} == --demo ]] && echo yes)" \
   -v "$PWD:/src:ro" -v "$cache:/cache" -v "$iso:/omarchy.iso:ro" -v "$out:/out" \
-  colorful-terminals-test:vm /src/tests/release-vm/inside
+  colorful-terminals-test:vm /src/tests/release-vm/inside || exit 1
+
+# The demo frames become demo.gif (for the README) and demo.mp4
+# (for posts, full size). Each frame stays as long as frames.txt says.
+if [[ ${1-} == --demo ]]; then
+  command -v ffmpeg > /dev/null || { echo "frames are in $out/demo; ffmpeg is needed to assemble them"; exit 1; }
+  ffmpeg -v error -y -f concat -safe 0 -i "$out/demo/frames.txt" \
+    -vf "split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a" \
+    -loop 0 demo.gif || exit 1
+  ffmpeg -v error -y -f concat -safe 0 -i "$out/demo/frames.txt" -vf "format=yuv420p" -r 30 -c:v libx264 -crf 20 -movflags +faststart demo.mp4 || exit 1
+  ls -la demo.gif demo.mp4
+fi

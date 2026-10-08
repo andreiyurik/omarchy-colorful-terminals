@@ -1,12 +1,12 @@
 # Colorful Terminals for Omarchy
 
-**A terminal background color for every project, and a hotkey that opens it.**
+**Never type into the wrong terminal again: every project gets its own background color, and a hotkey that opens it.**
 
 [![Tests](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml/badge.svg)](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml)
 [![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-81a1c1)](https://omarchy.org/)
 [![MIT license](https://img.shields.io/github/license/andreiyurik/omarchy-colorful-terminals?color=9ece6a)](LICENSE)
 
-![Three terminals on Omarchy Linux, each with its own background color: blue for shop, green for blog, red for api-gateway. Next to them the Colorful Terminals panel lists every project with its Super+Ctrl+Alt hotkey.](preview.png)
+![cd into a project and the terminal turns its color; Super+Ctrl+Alt+2 and +3 open two more projects in green and red; Super+Ctrl+Alt+0 shows the panel with every project's hotkey. Recorded in a real Omarchy.](demo.gif)
 
 You have eight terminals open. Two are in the shop, three in the blog, one is `ssh`'d into production. They all look exactly the same, and the only way to tell them apart is to read the prompt. Sooner or later a `git push --force` or a `rm -rf build` lands in the wrong one.
 

@@ -1,0 +1,69 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2154 # run, press, guest and log come from tests/release-vm/inside
+# The demo recording, sourced by tests/release-vm/inside when DEMO=yes once
+# the VM is up: a real Omarchy, a real Ghostty, keys pressed on the virtual
+# keyboard. Every frame is a screenshot with how long it should stay on
+# screen; tests/release-vm/run turns them into demo.gif and demo.mp4.
+#
+# The story, in ten seconds: a terminal, `cd code/shop`, it turns blue;
+# Super+Ctrl+Alt+2 opens the blog in green; Super+Ctrl+Alt+3 the API gateway
+# in red; Super+Ctrl+Alt+0 shows the panel with the three keys.
+
+frames=0
+frame() {   # <seconds on screen>
+  frames=$((frames + 1))
+  local name
+  name=$(printf 'demo/%03d' "$frames")
+  guest shot "$name"
+  printf 'file %s.png\nduration %s\n' "${name#demo/}" "$1" >> "$run/frames.txt"
+}
+
+log "Setting the scene"
+guest demo-setup
+: > "$run/frames.txt"
+
+log "Recording"
+press meta_l-ret
+for ((i = 0; i < 20; i++)); do [[ $(guest active-class) == com.mitchellh.ghostty ]] && break; sleep 0.5; done
+sleep 3
+guest demo-diagnose
+frame 1.6
+text="cd code/shop"
+for ((i = 0; i < ${#text}; i++)); do
+  type_text "${text:i:1}"
+  sleep 0.05
+  frame 0.09
+done
+sleep 0.4
+frame 0.5
+press ret
+sleep 1.5
+frame 2.2
+
+press meta_l-ctrl-alt-2
+for ((i = 0; i < 20; i++)); do [[ $(guest active-class) == org.omarchy.project_blog ]] && break; sleep 0.5; done
+sleep 2.5
+frame 2.2
+
+press meta_l-ctrl-alt-3
+for ((i = 0; i < 20; i++)); do [[ $(guest active-class) == org.omarchy.project_api_gateway ]] && break; sleep 0.5; done
+sleep 2.5
+frame 2.2
+
+# The pointer sits mid-screen, where the panel opens, and would raise a
+# tooltip: park it in the corner first (an absolute move on the USB tablet).
+qmp '"input-send-event", "arguments": {"events": [{"type":"abs","data":{"axis":"x","value":32767}},{"type":"abs","data":{"axis":"y","value":32767}}]}' > /dev/null
+sleep 0.5
+press meta_l-ctrl-alt-0
+sleep 3
+frame 3.5
+# ffmpeg's concat demuxer needs the last frame listed once more to honor its duration.
+printf 'file %03d.png\n' "$frames" >> "$run/frames.txt"
+press esc
+sleep 1
+
+log "Frames"
+mkdir -p /out/demo
+ssh_guest 'tar -C shots/demo -cf - .' | tar -C /out/demo -xf - 2> /dev/null
+cp "$run/frames.txt" /out/demo/frames.txt
+echo "$frames frames in tests/release-vm/out/demo/"

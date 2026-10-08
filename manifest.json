@@ -22,7 +22,7 @@
     "fish",
     "tmux"
   ],
-  "description": "Give every project its own terminal color, so you always know where you are. Super+Ctrl+Alt+1…9 opens a project or jumps to its open window, and Super+Ctrl+Alt+Shift+1…8 gives any terminal a color of its own. Works with any project launcher.",
+  "description": "Never type into the wrong terminal again: every project gets its own background color, and Super+Ctrl+Alt+1…9 opens it. Ghostty, Kitty, Alacritty and foot; bash, zsh, fish and tmux.",
   "kinds": [
     "overlay",
     "bar-widget"

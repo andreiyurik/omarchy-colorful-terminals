@@ -248,6 +248,12 @@ until guest session-ready 2> /dev/null; do
 done
 sleep 5
 
+if [[ ${DEMO-} == yes ]]; then
+  # shellcheck source=tests/release-vm/demo-scenario
+  source /src/tests/release-vm/demo-scenario
+  exit 0
+fi
+
 log "Install the plugin the way a user does"
 guest add | result
 guest panel 02-panel-first-run | result

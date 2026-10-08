@@ -101,6 +101,32 @@ case ${1-} in
     check "and Super+Ctrl+Alt+2 is free again" has_bind 'description: Project 2: not set'
     ;;
 
+  demo-setup)   # three projects, the plugin on, a quiet desktop, readable text
+    omarchy plugin add "$HOME/src" --enable --yes > /dev/null 2>&1
+    mkdir -p "$HOME/code/shop" "$HOME/code/blog" "$HOME/work/api-gateway" "$shots/demo"
+    "$helper" add "$HOME/code/shop" '#003b63' > /dev/null
+    "$helper" add "$HOME/code/blog" '#1a4311' > /dev/null
+    "$helper" add "$HOME/work/api-gateway" '#5e2024' > /dev/null
+    "$helper" integration install --yes > /dev/null
+    # Bigger text for the recording. A fresh install may link the config to
+    # the packaged one, so it is copied before the line goes in; a Ghostty
+    # that is already running keeps its config, so none may be left.
+    # Bigger text for the recording, in whichever terminal this Omarchy
+    # opens: the size goes into every terminal config Omarchy ships.
+    sed -i -E 's/^size = [0-9.]+/size = 19/' "$HOME/.config/alacritty/alacritty.toml" 2> /dev/null
+    sed -i -E 's/^font_size [0-9.]+/font_size 19.0/' "$HOME/.config/kitty/kitty.conf" 2> /dev/null
+    sed -i -E 's/^(font=.*:size=)[0-9.]+/\119/' "$HOME/.config/foot/foot.ini" 2> /dev/null
+    sed -i -E 's/^font-size = [0-9.]+/font-size = 19/' "$HOME/.config/ghostty/config" 2> /dev/null
+    pkill -x ghostty; pkill -x kitty; pkill -x alacritty; pkill -x foot; sleep 1
+    for n in "Update System" "Learn Keybindings"; do omarchy-shell -q notifications dismiss "$n"; done
+    wait_for 10 bash -c '[[ $(omarchy-shell shell ping) == ok ]]'
+    sleep 2
+    ;;
+
+  demo-diagnose)   # which terminal this Omarchy opened
+    echo "terminal: $(hyprctl activewindow -j | jq -r '"\(.class) (\(.title))"'), processes: $(pgrep -ax 'ghostty|kitty|alacritty|foot' | tr '\n' ';')"
+    ;;
+
   project-windows)   # prints how many windows the project has
     hyprctl clients -j | jq '[.[] | select(.class | startswith("org.omarchy.project_demo"))] | length'
     ;;
@@ -178,7 +204,7 @@ case ${1-} in
     ;;
 
   *)
-    echo "usage: guest session-ready|add|panel <name>|turn-on|move|project-windows|window-pixel|active-pixel|active-class|color-keys-bound|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
+    echo "usage: guest session-ready|add|panel <name>|turn-on|move|demo-setup|project-windows|window-pixel|active-pixel|active-class|color-keys-bound|theme-background|close-project|shot <name>|update|turn-off|remove" >&2
     exit 2
     ;;
 esac
