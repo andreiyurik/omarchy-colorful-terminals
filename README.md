@@ -130,7 +130,7 @@ The plugin itself lives only in `~/.config/omarchy/plugins/andreiyurik.colorful-
 | `~/.config/hypr/hyprland.lua` | Loads the `Super+Ctrl+Alt+0…9` and `Super+Ctrl+Alt+Shift+0…8` keys |
 | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Adds **Style › Colorful Terminals** to the Omarchy menu |
 
-Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink. Nothing needs sudo, nothing goes over the network, and nothing is collected.
+Each block starts with `BEGIN colorful-terminals` and ends with `END colorful-terminals`. Before changing a file, the plugin saves a copy to `~/.config/colorful-terminals/backup/`. A symlinked `~/.bashrc` stays a symlink. Nothing needs elevated privileges, nothing goes over the network, and nothing is collected.
 
 ## Remove
 
@@ -180,7 +180,7 @@ Every project terminal gets the app id `org.omarchy.project_<name>`, so the key 
 
 ### Is it safe?
 
-It adds marked blocks to five files, only after you choose **Turn on**, with a backup of each, and **Turn off** restores them byte for byte. No sudo, no network. See [What it changes](#what-it-changes).
+It adds marked blocks to five files, only after you choose **Turn on**, with a backup of each, and **Turn off** restores them byte for byte. No elevated privileges, no network. See [What it changes](#what-it-changes).
 
 ## Development
 
