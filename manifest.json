@@ -9,6 +9,11 @@
   "repository": "https://github.com/andreiyurik/omarchy-colorful-terminals",
   "keywords": [
     "terminal",
+    "project",
+    "per-project",
+    "directory",
+    "ssh",
+    "production",
     "background color",
     "projects",
     "hotkeys",
@@ -22,7 +27,7 @@
     "fish",
     "tmux"
   ],
-  "description": "Never type into the wrong terminal again: every project gets its own background color, and Super+Ctrl+Alt+1…9 opens it. Ghostty, Kitty, Alacritty and foot; bash, zsh, fish and tmux.",
+  "description": "Each project folder gets its own terminal color: cd in and the terminal turns that color, leave and it turns back. Super+Ctrl+Alt+1…9 opens a project. Ghostty, Kitty, Alacritty, foot; bash, zsh, fish, tmux.",
   "kinds": [
     "overlay",
     "bar-widget"

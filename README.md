@@ -1,6 +1,8 @@
 # Colorful Terminals for Omarchy
 
-**Never type into the wrong terminal again: every project gets its own background color, and a hotkey that opens it.**
+**Each project folder gets its own terminal color. `cd` in and the terminal turns that color; leave and it turns back. A hotkey opens any project.**
+
+Not a theme: the color follows the folder you are in, not the window.
 
 [![Tests](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml/badge.svg)](https://github.com/andreiyurik/omarchy-colorful-terminals/actions/workflows/tests.yml)
 [![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-81a1c1)](https://omarchy.org/)
@@ -10,7 +12,7 @@
 
 You have eight terminals open. Two are in the shop, three in the blog, one is `ssh`'d into production. They all look exactly the same, and the only way to tell them apart is to read the prompt. Sooner or later a `git push --force` or a `rm -rf build` lands in the wrong one.
 
-Colorful Terminals is an [Omarchy](https://omarchy.org/) plugin that fixes this at the root: every project folder gets its own terminal background color. `cd` into the project and the terminal turns blue. Leave it and the theme color comes back. Press `Super+Ctrl+Alt+1` and the shop opens in a blue terminal, or its window comes to the front if it is already open. You know where you are before you read a single character.
+Colorful Terminals is an [Omarchy](https://omarchy.org/) plugin that fixes this at the root: you give each project folder a color, and the terminal wears the color of the folder it is in. `cd` into the shop and the terminal turns blue. Leave it and the theme color comes back. Press `Super+Ctrl+Alt+1` and the shop opens in a blue terminal, or its window comes to the front if it is already open. You know where you are before you read a single character. Make production red and you will think twice before you type.
 
 It works in Ghostty, Kitty, Alacritty and foot, in bash, zsh and fish, inside tmux, and with any project launcher, because it keys off the folder and nothing else.
 
