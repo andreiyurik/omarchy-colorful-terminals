@@ -189,8 +189,9 @@ printf 'background = "#1a1b26"\n' > "$HOME/.local/state/omarchy/current/theme/co
 eq "a dark theme the dark one" "Super+Ctrl+Alt+Shift+1  #003b63  Blue" "$(h list | grep -F 'Shift+1' | sed 's/^ *//')"
 
 echo "config: the color keys"
-# A stand-in Hyprland: the focused window's tags, and a key press that a shell
-# at a prompt answers by emptying the request file.
+# A stand-in Hyprland: the focused window's tags (and no process, so the
+# helper cannot look into it), and a key press that a shell at a prompt
+# answers by emptying the request file. tests/paint.test.sh has real ones.
 fake="$HOME/fake-bin"
 mkdir -p "$fake" "$HOME/run"
 chmod 700 "$HOME/run"
@@ -226,8 +227,8 @@ ok "a default color" paint 7
 eq "is the palette's" "#572142" "$(cat "$HOME/request")"
 fails "no key 9" paint 9
 fails "no key 10" paint 10
-FAKE_SHELL=busy fails "a terminal that does not answer" paint 1
-eq "says why" "-a Colorful Terminals -- The terminal kept its color Colors change at a shell prompt, in terminals opened after Colorful Terminals was turned on." "$(cat "$HOME/notified")"
+FAKE_SHELL=busy fails "a terminal that does not answer, in a window it cannot look into" paint 1
+eq "says why" "-a Colorful Terminals -- The terminal kept its color Its window holds several terminals, and the one you are in did not answer: a program is running there, or it was opened before Colorful Terminals was turned on. Press the key again at a shell prompt." "$(cat "$HOME/notified")"
 ok "and leaves nothing behind for a later key press" test ! -e "$HOME/run/colorful-terminals/paint"
 rm -f "$HOME/notified" "$HOME/request"
 FAKE_TAGS='"default-opacity*"' fails "a browser in focus" paint 1

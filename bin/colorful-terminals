@@ -468,44 +468,62 @@ drop_paint_header() {
   if ((header > 0 && header == ${#lines[@]})) && [[ -z ${lines[-1]} ]]; then unset 'lines[-1]'; fi
 }
 
-# What Super+Ctrl+Alt+Shift+<n> runs (0 takes the color away). The shell in
-# the focused terminal does the coloring, so it is always that terminal, even
-# when one terminal program draws every window: the color goes into
-# $XDG_RUNTIME_DIR/colorful-terminals/paint, Hyprland presses
-# Ctrl+Alt+Shift+F12 in the focused window, and the shell hook's key binding
-# takes the color and empties the file.
+# What Super+Ctrl+Alt+Shift+<n> runs (0 takes the color away). It colors the
+# focused terminal only where it can tell exactly which one that is, and never
+# guesses:
+#  - A shell at its prompt does it itself, so it is always that terminal, even
+#    when one terminal program draws every window: the color goes into
+#    $XDG_RUNTIME_DIR/colorful-terminals/paint, Hyprland presses
+#    Ctrl+Alt+Shift+F12 in the focused window, and the shell hook's key
+#    binding takes the color and empties the file.
+#  - While a program runs (an editor, ssh, Claude Code), the shell cannot
+#    answer and the key would go to the program, so the helper finds the
+#    window's terminal itself (see find_target), colors it, and leaves the
+#    color in tty/<name> for the shell's next prompt to keep.
+#  - When neither works, a notification says so and nothing changes.
 cmd_paint() {
   if (($# != 1)) || [[ ! $1 =~ ^[0-9]$ ]] || (($1 > paint_keys)); then die "usage: colorful-terminals paint <1-$paint_keys|0>"; fi
-  local n=$1 color=reset dir request tmp i
+  local n=$1 color=reset dir request tmp i window
   [[ -n ${XDG_RUNTIME_DIR-} && -d $XDG_RUNTIME_DIR ]] || die "XDG_RUNTIME_DIR is not set"
   if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE-} ]] || ! command -v hyprctl > /dev/null; then die "this needs Hyprland"; fi
-  if ! focused_is_terminal; then
+  window=$(focused_window)
+  if ! jq -e '(.tags // []) | map(sub("\\*$"; "")) | index("terminal") != null' > /dev/null 2>&1 <<< "$window"; then
     notify "No terminal in focus" "Click a terminal, then press Super+Ctrl+Alt+Shift+$n again."
     exit 1
   fi
-  if ((n)); then
-    read_config
-    color=$(paint_color "$n")
-  fi
+  read_config
+  ((n == 0)) || color=$(paint_color "$n")
 
   dir=$XDG_RUNTIME_DIR/colorful-terminals
-  request=$dir/paint
   [[ -d $dir ]] || mkdir -m 700 "$dir"
+  find_target "$(jq -r '.pid // 0' <<< "$window" 2> /dev/null || echo 0)"
+  if [[ -n $target_tty && $target_front != shell ]]; then
+    paint_target "$color"
+    return
+  fi
+
+  request=$dir/paint
   tmp=$(mktemp "$dir/.paint.XXXXXX")
   printf '%s\n' "$color" > "$tmp"
   mv -f "$tmp" "$request"
-
   timeout 3 hyprctl eval "$send_key_lua" > /dev/null 2>&1 || true
   for ((i = 0; i < 40; i++)); do
     [[ -s $request ]] || break
     sleep 0.025
   done
-  if [[ -s $request ]]; then
+  if [[ ! -s $request ]]; then
     rm -f -- "$request"
-    notify "The terminal kept its color" "Colors change at a shell prompt, in terminals opened after Colorful Terminals was turned on."
-    exit 1
+    return
   fi
   rm -f -- "$request"
+  # A shell that did not answer at its prompt: one opened before the hook was
+  # added, or busy in a loop of its own.
+  if [[ -n $target_tty ]]; then
+    paint_target "$color"
+    return
+  fi
+  notify "The terminal kept its color" "Its window holds several terminals, and the one you are in did not answer: a program is running there, or it was opened before Colorful Terminals was turned on. Press the key again at a shell prompt."
+  exit 1
 }
 
 # Ctrl+Alt+Shift+F12, to the focused surface with explicit mods, the way
@@ -514,10 +532,168 @@ cmd_paint() {
 send_key_lua='hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL ALT SHIFT", key = "F12", state = "down" }))
 hl.timer(function() hl.dispatch(hl.dsp.send_key_state({ mods = "CTRL ALT SHIFT", key = "F12", state = "up" })) end, { timeout = 50, type = "oneshot" })'
 
-# Omarchy tags every terminal window "terminal" (default/hypr/apps/terminals.lua).
-focused_is_terminal() {
-  timeout 3 hyprctl activewindow -j 2> /dev/null | head -c 65536 |
-    jq -e '(.tags // []) | map(sub("\\*$"; "")) | index("terminal") != null' > /dev/null 2>&1
+focused_window() {
+  timeout 3 hyprctl activewindow -j 2> /dev/null | head -c 65536 || true
+}
+
+# Finds the terminal in the window of process <pid>, and sets:
+#   target_tty     its tty, or "" when there is no telling which one it is
+#   target_front   "shell" when a shell sits at the front of it (it can answer
+#                  the key), else the program running there
+#   target_pane    the tmux pane on that tty, and target_tmux the tmux command
+#                  for its server ("" outside tmux)
+#   target_shell   the shell that owns the tty, for the project color
+# A terminal program that runs one process per window (foot, and Alacritty,
+# Ghostty and Kitty unless told to share one) has one tty under it, so that is
+# the one. Several ttys under one process (shared windows, tabs, splits) are
+# told apart only by Kitty, through its remote control socket; otherwise
+# target_tty stays empty.
+find_target() {
+  local pid=$1 child tty ttys=() shells=()
+  target_tty="" target_front="" target_pane="" target_tmux=() target_shell=""
+  [[ $pid =~ ^[1-9][0-9]*$ && -O /proc/$pid ]] || return 0
+  for child in $(children_of "$pid"); do
+    # The terminal starts each shell as the leader of a session on its tty.
+    if ! proc_stat "$child" || ((stat_session != child)); then continue; fi
+    tty=$(proc_tty "$child") || continue
+    [[ " ${ttys[*]} " == *" $tty "* ]] || { ttys+=("$tty"); shells+=("$child"); }
+  done
+  if ((${#ttys[@]} == 1)); then
+    target_tty=${ttys[0]} target_shell=${shells[0]}
+  elif ((${#ttys[@]} > 1)); then
+    kitty_focused "$pid" || return 0
+  else
+    return 0
+  fi
+  front_of "$target_shell"
+  [[ $target_front == tmux ]] && tmux_pane
+  return 0
+}
+
+children_of() {
+  local f kids
+  for f in /proc/"$1"/task/*/children; do
+    # The list has no newline at the end, so read "fails" with it read.
+    kids=""
+    { read -r kids < "$f"; } 2> /dev/null || [[ -n $kids ]] || continue
+    printf '%s\n' "$kids"
+  done
+}
+
+# Sets stat_* from /proc/<pid>/stat. The command name may hold spaces and
+# parentheses, so the fields are read after its last ")".
+proc_stat() {
+  local line fields
+  { line=$(< "/proc/$1/stat"); } 2> /dev/null || return 1
+  read -ra fields <<< "${line##*) }"
+  stat_session=${fields[3]} stat_tpgid=${fields[5]}
+}
+
+# Prints the pseudo-terminal of <pid>: its stdin, stdout or stderr, owned by
+# you.
+proc_tty() {
+  local fd tty
+  for fd in 0 1 2; do
+    tty=$(readlink "/proc/$1/fd/$fd" 2> /dev/null) || continue
+    if [[ $tty =~ ^/dev/pts/[0-9]+$ && -O $tty && -w $tty ]]; then
+      printf '%s' "$tty"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Sets target_front from what holds the front of the tty of shell <pid>.
+front_of() {
+  local comm=""
+  proc_stat "$1" || { target_front=unknown; return 0; }
+  { comm=$(< "/proc/$stat_tpgid/comm"); } 2> /dev/null || comm=unknown
+  case $comm in
+    bash | zsh | fish) target_front=shell ;;
+    tmux*) target_front=tmux target_client=$stat_tpgid ;;
+    *) target_front=$comm ;;
+  esac
+}
+
+# The window's tty runs a tmux client: the tmux server tells which pane that
+# client shows, and the pane's tty is the target. The client's own -L or -S
+# says which server; the first word that is not an option ends them.
+tmux_pane() {
+  local args=() i line pane tty pid
+  command -v tmux > /dev/null || { target_tty=""; return 0; }
+  mapfile -d '' args < "/proc/$target_client/cmdline" 2> /dev/null || true
+  target_tmux=(tmux)
+  for ((i = 1; i < ${#args[@]}; i++)); do
+    case ${args[i]} in
+      -L | -S) target_tmux+=("${args[i]}" "${args[i + 1]-}"); ((i += 1)) ;;
+      -L?* | -S?*) target_tmux+=("${args[i]}") ;;
+      -c | -f | -T) ((i += 1)) ;;
+      -*) ;;
+      *) break ;;
+    esac
+  done
+  line=$(timeout 2 "${target_tmux[@]}" display-message -p -c "$target_tty" '#{pane_id} #{pane_tty} #{pane_pid}' 2> /dev/null) || line=""
+  read -r pane tty pid <<< "$line"
+  if [[ ! $pane =~ ^%[0-9]+$ || ! $tty =~ ^/dev/pts/[0-9]+$ || ! $pid =~ ^[0-9]+$ ]]; then
+    target_tty=""
+    return 0
+  fi
+  target_pane=$pane target_tty=$tty target_shell=$pid
+  front_of "$pid"
+  # A tmux inside the pane: leave that to the key.
+  [[ $target_front != tmux ]] || target_tty=""
+}
+
+# Kitty draws several windows from one process, but its remote control (on
+# in Omarchy's kitty.conf) says which window has focus and its shell. The
+# socket is in KITTY_LISTEN_ON, which kitty gives to every shell it starts.
+kitty_focused() {
+  local pid=$1 child socket="" shell tty comm=""
+  { comm=$(< "/proc/$pid/comm"); } 2> /dev/null || true
+  [[ $comm == kitty ]] && command -v kitten > /dev/null || return 1
+  for child in $(children_of "$pid"); do
+    socket=$(tr '\0' '\n' < "/proc/$child/environ" 2> /dev/null | sed -n 's/^KITTY_LISTEN_ON=//p' | head -n 1) || true
+    [[ -z $socket ]] || break
+  done
+  [[ -n $socket ]] || return 1
+  shell=$(timeout 2 kitten @ --to "$socket" ls 2> /dev/null | head -c 1048576 |
+    jq -r 'first(.[] | select(.is_focused) | .tabs[] | select(.is_focused) | .windows[] | select(.is_focused) | .pid) // empty' 2> /dev/null) || return 1
+  [[ $shell =~ ^[1-9][0-9]*$ ]] && tty=$(proc_tty "$shell") || return 1
+  target_tty=$tty target_shell=$shell
+}
+
+# Colors the target found by find_target with <color> ("reset" for the
+# project color of the shell's folder, or the theme's), and leaves it for the
+# shell's next prompt.
+paint_target() {
+  local color=$1 shown name inbox cwd
+  shown=$color
+  if [[ $color == reset ]]; then
+    cwd=$(readlink "/proc/$target_shell/cwd" 2> /dev/null) || cwd=""
+    _ct_load
+    _ct_match_dir "$cwd"
+    shown=${_ct_match,,}
+  fi
+  if [[ -n $target_pane ]]; then
+    if [[ -n $shown ]]; then
+      timeout 2 "${target_tmux[@]}" set -p -t "$target_pane" window-style "bg=$shown" \; \
+        set -p -t "$target_pane" window-active-style "bg=$shown" > /dev/null 2>&1 || true
+    else
+      timeout 2 "${target_tmux[@]}" set -p -u -t "$target_pane" window-style \; \
+        set -p -u -t "$target_pane" window-active-style > /dev/null 2>&1 || true
+    fi
+  elif [[ -n $shown ]]; then
+    # shellcheck disable=SC2016 # $1 and $2 are for the inner bash
+    # timeout: a terminal that stopped reading must not hang the key.
+    timeout 1 bash -c 'printf "\e]11;%s\a" "$1" > "$2"' _ "$shown" "$target_tty" 2> /dev/null || true
+  else
+    # shellcheck disable=SC2016
+    timeout 1 bash -c 'printf "\e]111\a" > "$1"' _ "$target_tty" 2> /dev/null || true
+  fi
+  name=${target_tty#/dev/}
+  inbox=$XDG_RUNTIME_DIR/colorful-terminals/tty/${name//\//-}
+  [[ -d ${inbox%/*} ]] || mkdir -m 700 "${inbox%/*}"
+  printf '%s\n' "$color" > "$inbox"
 }
 
 # ------------------------------------------------------------- panel queries

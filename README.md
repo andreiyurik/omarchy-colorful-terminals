@@ -39,7 +39,7 @@ Every terminal that understands the standard OSC 11 escape code can be colored. 
 | Terminal | Project colors | Color keys (`Super+Ctrl+Alt+Shift`) | Notes |
 |---|:-:|:-:|---|
 | Ghostty | ✓ | ✓ | The author's daily terminal |
-| Kitty | ✓ | ✓ | Each kitty window has its own color |
+| Kitty | ✓ | ✓ | Each kitty window has its own color; with a program running, its remote control (on in Omarchy) finds the focused one |
 | Alacritty | ✓ | ✓ | |
 | foot | ✓ | ✓ | Tested on every release in a real Omarchy VM |
 | Any other terminal with OSC 11 (WezTerm, Konsole, GNOME Terminal) | ✓ | ✓ | Not tested by the release test |
@@ -69,7 +69,13 @@ The hook runs before each prompt and costs 1–5 ms, with no forks. The color ch
 
 The keys are bound by keycode, the same way Omarchy binds its own digits, so they work on any keyboard layout. When you add, reorder or remove a project, the plugin re-binds only its own keys so their names stay current; it never reloads the Hyprland config, so your monitors, other plugins and anything set at runtime are left alone. The panel shows each project's key under its name, and Omarchy's keybindings list (`Super+K`) shows them all: project keys with their folder names, color keys with their colors.
 
-A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when you `cd` into a project and goes away with `Super+Ctrl+Alt+Shift+0` or when the terminal closes. It is always the terminal you are in, even when one terminal program draws all your windows, because the shell in that terminal does the coloring. If a program is running there (an editor, `btop`, `ssh`), the shell cannot answer, so a notification says so and nothing changes.
+A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when you `cd` into a project and goes away with `Super+Ctrl+Alt+Shift+0` or when the terminal closes. It is always the terminal you are in, and never a guess:
+
+- **At a shell prompt** the shell in that terminal does the coloring, so it works in every terminal, tab and split, even when one terminal program draws all your windows.
+- **While a program runs** (Claude Code, an editor, `ssh`, a long build) the shell cannot answer, so the plugin finds the window's terminal itself and colors it at once; the shell keeps the color when the program ends. It finds it when the terminal program runs one process per window (foot always does, and Ghostty, Kitty and Alacritty do unless set to share one), in a tmux pane, and in Kitty windows, tabs and splits through Kitty's remote control, which Omarchy's `kitty.conf` turns on.
+- **Otherwise** (say, a program running in one of several windows one Ghostty draws), the plugin cannot tell which terminal you are in, so a notification says so and nothing changes. Press the key again at a prompt.
+
+A program that paints its own background (`vim` with a color scheme, `btop`) hides the color until it exits.
 
 ### In the panel
 

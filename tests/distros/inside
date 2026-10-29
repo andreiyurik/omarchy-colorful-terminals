@@ -5,7 +5,7 @@ cd /src || exit 1
 . /etc/os-release
 echo "$PRETTY_NAME: bash ${BASH_VERSION%%(*}, $(zsh --version | cut -d' ' -f2), fish $(fish --version | grep -o '[0-9.]*$'), $(tmux -V)"
 status=0
-for t in config integration hooks; do
+for t in config integration hooks paint; do
   echo "== $t"
   bash "tests/$t.test.sh" || status=1
 done
