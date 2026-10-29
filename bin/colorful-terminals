@@ -535,7 +535,9 @@ cmd_paint() {
 
 # The folder of the shell found by find_target.
 target_folder() {
-  [[ -n $target_shell ]] && readlink "/proc/$target_shell/cwd" 2> /dev/null || true
+  if [[ -n $target_shell ]]; then
+    readlink "/proc/$target_shell/cwd" 2> /dev/null || true
+  fi
 }
 
 # tty/<name> for a tty: /dev/pts/3 is tty/pts-3, as the shell hooks name it.
