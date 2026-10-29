@@ -8,7 +8,8 @@
 # tmux pane instead, which keeps its style, so there it is set once.
 #
 # Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own (see
-# the bash hook): Hyprland presses Ctrl+Alt+Shift+F12, which runs __ct_key.
+# the bash hook): at a prompt Hyprland presses Ctrl+Alt+Shift+F12, which runs
+# __ct_key; while a program runs, the next prompt takes it from $__ct_inbox.
 #
 # It reads projects.conf by the same rules as lib/config.bash (tests/hooks.test.sh
 # checks they agree), with fish builtins only.
@@ -19,6 +20,7 @@ set -q __ct_paint; or set -g __ct_paint ''
 set -g __ct_request
 set -q XDG_RUNTIME_DIR; and test -n "$XDG_RUNTIME_DIR"
 and set -g __ct_request $XDG_RUNTIME_DIR/colorful-terminals/paint
+set -q __ct_inbox; or set -g __ct_inbox ''
 
 # Prints the color for folder <dir>: the project with the longest matching
 # path wins. Nothing means no project here.
@@ -94,6 +96,7 @@ or return 0
 # Shows this terminal's own color, or else the project color for $PWD.
 # A named event handler replaces itself, so loading this again adds nothing.
 function __ct_prompt --on-event fish_prompt
+    test -n "$__ct_inbox"; and test -s $__ct_inbox; and __ct_take $__ct_inbox
     set -l color $__ct_paint
     test -n "$color"; or set color (__ct_color_for $PWD)
     set -l in_tmux 0
@@ -104,20 +107,34 @@ function __ct_prompt --on-event fish_prompt
     end
 end
 
-# Takes the color the helper left and empties the file, which tells the
-# helper this terminal got it.
-function __ct_key
-    test -n "$__ct_request"; and test -r $__ct_request; or return 0
-    read -l color <$__ct_request
-    true >$__ct_request
+# Takes the color the helper left in <file> and empties the file, which tells
+# the helper this terminal got it. Fails if there was no color.
+function __ct_take --argument-names file
+    test -r $file; or return 1
+    read -l color <$file
+    true >$file
     if test "$color" = reset
         set -g __ct_paint ''
     else if string match -rq -- '^#[0-9A-Fa-f]{6}$' "$color"
         set -g __ct_paint $color
     else
-        return 0
+        return 1
     end
-    __ct_prompt
+end
+
+function __ct_key
+    test -n "$__ct_request"; and __ct_take $__ct_request; and __ct_prompt
+    return 0
+end
+
+# This terminal's file, named after its tty: /dev/pts/3 is tty/pts-3. A color
+# left there for an earlier terminal on the same tty is not ours.
+if test -z "$__ct_inbox" -a -n "$__ct_request"
+    set -l tty (command tty 2>/dev/null)
+    if string match -q -- '/dev/*' "$tty"
+        set -g __ct_inbox $XDG_RUNTIME_DIR/colorful-terminals/tty/(string replace -a / - -- (string sub -s 6 -- $tty))
+        test -s $__ct_inbox; and true >$__ct_inbox
+    end
 end
 
 # Ctrl+Alt+Shift+F12, in the default and vi insert modes. fish 4 names keys;

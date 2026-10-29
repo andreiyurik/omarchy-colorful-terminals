@@ -215,6 +215,18 @@ check_paint() {   # <name> <shell command>
     "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$(leave "'\$(touch ~/pwned)'")
 $key")"
   ok "$name: and never run" test ! -e "$HOME/pwned"
+  # While a program runs, the helper leaves the color in tty/<name> instead,
+  # and the next prompt keeps it. One left for an earlier terminal on the
+  # same tty is not this one's.
+  mkdir -p "$HOME/run/colorful-terminals/tty"
+  for i in $(seq 0 300); do echo '#999999' > "$HOME/run/colorful-terminals/tty/pts-$i"; done
+  eq "$name: keeps a color left while a program ran, until 0" "11;#abcdef 11;#1a3a5a" \
+    "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$(inbox_walk)")"
+  rm -rf "$HOME/run/colorful-terminals/tty"
+}
+inbox_walk() {
+  local file='$XDG_RUNTIME_DIR/colorful-terminals/tty/$(tty | sed "s|^/dev/||; s|/|-|g")'
+  printf '%s\n' "echo '#abcdef' > $file" 'true' 'cd ~/code/shop/src' "echo reset > $file"
 }
 if ! command -v script > /dev/null; then
   echo "  SKIP: needs script(1) for a pseudo-terminal"

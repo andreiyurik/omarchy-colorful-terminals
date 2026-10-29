@@ -7,7 +7,8 @@
 # colors the tmux pane instead, which keeps its style, so there it is set once.
 #
 # Super+Ctrl+Alt+Shift+1…8 gives this one terminal a color of its own (see
-# the bash hook): Hyprland presses Ctrl+Alt+Shift+F12, which runs _ct_key.
+# the bash hook): at a prompt Hyprland presses Ctrl+Alt+Shift+F12, which runs
+# _ct_key; while a program runs, the next prompt takes it from $_ct_inbox.
 #
 # It reads projects.conf by the same rules as lib/config.bash (tests/hooks.test.sh
 # checks they agree), in plain zsh: no forks, no modules.
@@ -16,6 +17,7 @@ typeset -g _ct_file="$HOME/.config/colorful-terminals/projects.conf"
 typeset -g _ct_shown=${_ct_shown-}
 typeset -g _ct_paint=${_ct_paint-}
 typeset -g _ct_request=${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/colorful-terminals/paint}
+typeset -g _ct_inbox=${_ct_inbox-}
 
 # Sets REPLY to the color for folder $1: the project with the longest matching
 # path wins. "" means no project here.
@@ -91,6 +93,7 @@ _ct_apply() {
 
 # Shows this terminal's own color, or else the project color for $PWD.
 _ct_precmd() {
+  [[ -z $_ct_inbox || ! -s $_ct_inbox ]] || _ct_take $_ct_inbox
   local REPLY=$_ct_paint
   [[ -n $REPLY ]] || _ct_color_for "$PWD"
   if [[ $REPLY != "$_ct_shown" ]] || [[ -n $REPLY && ( -z ${TMUX-} || -z ${TMUX_PANE-} ) ]]; then
@@ -99,25 +102,36 @@ _ct_precmd() {
   fi
 }
 
-# Takes the color the helper left and empties the file, which tells the
-# helper this terminal got it.
-_ct_key() {
+# Takes the color the helper left in <file> and empties the file, which tells
+# the helper this terminal got it. Fails if there was no color.
+_ct_take() {
   local color
-  [[ -n $_ct_request && -r $_ct_request ]] || return 0
-  color=$(<$_ct_request)
-  : >| $_ct_request
+  [[ -r $1 ]] || return 1
+  color=$(<$1)
+  : >| $1
   if [[ $color == reset ]]; then
     _ct_paint=""
   elif [[ $color == \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f] ]]; then
     _ct_paint=$color
   else
-    return 0
+    return 1
   fi
-  _ct_precmd
+}
+
+_ct_key() {
+  [[ -n $_ct_request ]] && _ct_take $_ct_request && _ct_precmd
+  return 0
 }
 
 # Only for interactive shells that draw on a real terminal.
 [[ -o interactive && -t 1 && $TERM != linux && $TERM != dumb ]] || return 0
+
+# This terminal's file, named after its tty: /dev/pts/3 is tty/pts-3. A color
+# left there for an earlier terminal on the same tty is not ours.
+if [[ -z $_ct_inbox && -n $_ct_request && $TTY == /dev/* ]]; then
+  _ct_inbox=${_ct_request%/*}/tty/${${TTY#/dev/}//\//-}
+  [[ ! -s $_ct_inbox ]] || : >| $_ct_inbox
+fi
 
 # add-zsh-hook keeps one copy, so sourcing ~/.zshrc again adds nothing.
 autoload -Uz add-zsh-hook
