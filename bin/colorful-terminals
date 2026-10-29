@@ -481,9 +481,11 @@ drop_paint_header() {
 #    window's terminal itself (see find_target), colors it, and leaves the
 #    color in tty/<name> for the shell's next prompt to keep.
 #  - When neither works, a notification says so and nothing changes.
+# Then, for a color, it offers to remember it for the terminal's folder (see
+# cmd_offer).
 cmd_paint() {
   if (($# != 1)) || [[ ! $1 =~ ^[0-9]$ ]] || (($1 > paint_keys)); then die "usage: colorful-terminals paint <1-$paint_keys|0>"; fi
-  local n=$1 color=reset dir request tmp i window
+  local n=$1 color=reset dir request tmp i window answer=() folder="" inbox=""
   [[ -n ${XDG_RUNTIME_DIR-} && -d $XDG_RUNTIME_DIR ]] || die "XDG_RUNTIME_DIR is not set"
   if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE-} ]] || ! command -v hyprctl > /dev/null; then die "this needs Hyprland"; fi
   window=$(focused_window)
@@ -497,33 +499,114 @@ cmd_paint() {
   dir=$XDG_RUNTIME_DIR/colorful-terminals
   [[ -d $dir ]] || mkdir -m 700 "$dir"
   find_target "$(jq -r '.pid // 0' <<< "$window" 2> /dev/null || echo 0)"
-  if [[ -n $target_tty && $target_front != shell ]]; then
-    paint_target "$color"
-    return
-  fi
-
-  request=$dir/paint
-  tmp=$(mktemp "$dir/.paint.XXXXXX")
-  printf '%s\n' "$color" > "$tmp"
-  mv -f "$tmp" "$request"
-  timeout 3 hyprctl eval "$send_key_lua" > /dev/null 2>&1 || true
-  for ((i = 0; i < 40; i++)); do
-    [[ -s $request ]] || break
-    sleep 0.025
-  done
-  if [[ ! -s $request ]]; then
+  if [[ -z $target_tty || $target_front == shell ]]; then
+    request=$dir/paint
+    tmp=$(mktemp "$dir/.paint.XXXXXX")
+    printf '%s\n' "$color" > "$tmp"
+    mv -f "$tmp" "$request"
+    timeout 3 hyprctl eval "$send_key_lua" > /dev/null 2>&1 || true
+    # The shell answers by replacing the color with its file name and folder
+    # (an older hook empties the file instead).
+    for ((i = 0; i < 40; i++)); do
+      [[ $(head -n 1 "$request" 2> /dev/null) == "$color" ]] || break
+      sleep 0.025
+    done
+    if [[ $(head -n 1 "$request" 2> /dev/null) != "$color" ]]; then
+      sleep 0.05
+      mapfile -t -n 2 answer < "$request" 2> /dev/null || true
+      rm -f -- "$request"
+      inbox=${answer[0]-} folder=${answer[1]-}
+      [[ $inbox =~ ^[A-Za-z0-9-]+$ ]] && inbox=$dir/tty/$inbox || inbox=""
+      [[ -n $folder ]] || folder=$(target_folder)
+      offer "$n" "$color" "$folder" "$inbox"
+      return
+    fi
     rm -f -- "$request"
-    return
+    # A shell that did not answer at its prompt: one opened before the hook
+    # was added, or busy in a loop of its own.
+    if [[ -z $target_tty ]]; then
+      notify "The terminal kept its color" "Its window holds several terminals, and the one you are in did not answer: a program is running there, or it was opened before Colorful Terminals was turned on. Press the key again at a shell prompt."
+      exit 1
+    fi
   fi
-  rm -f -- "$request"
-  # A shell that did not answer at its prompt: one opened before the hook was
-  # added, or busy in a loop of its own.
-  if [[ -n $target_tty ]]; then
-    paint_target "$color"
-    return
+  paint_target "$color"
+  offer "$n" "$color" "$(target_folder)" "$(inbox_for "$target_tty")"
+}
+
+# The folder of the shell found by find_target.
+target_folder() {
+  [[ -n $target_shell ]] && readlink "/proc/$target_shell/cwd" 2> /dev/null || true
+}
+
+# tty/<name> for a tty: /dev/pts/3 is tty/pts-3, as the shell hooks name it.
+inbox_for() {
+  local name=${1#/dev/}
+  printf '%s' "$XDG_RUNTIME_DIR/colorful-terminals/tty/${name//\//-}"
+}
+
+# Asks, in the background so the key returns at once, whether to remember
+# color key <n>'s <color> for <folder>.
+offer() {
+  local n=$1 color=$2 folder=$3 inbox=$4
+  ((n)) && [[ -n $folder ]] && command -v notify-send > /dev/null || return 0
+  setsid -f "$helper_path" offer "$color" "$folder" "$inbox" < /dev/null > /dev/null 2>&1 || true
+}
+
+# After a color key: "Keep this color for shop?" with a Remember button,
+# for the git repository the terminal is in (or its folder). Remember makes
+# the folder a project in that color, or gives an existing project that
+# color, and hands the terminal back to its project color through <inbox>.
+# Not for ~ or /, and not when the project already has that color.
+cmd_offer() {
+  (($# == 3)) || die "usage: colorful-terminals offer <#rrggbb> <folder> <terminal file>"
+  local color=${1,,} folder=$2 inbox=$3 root name shown i n=0 old="" title body button action out key
+  valid_color "$color" && [[ -d $folder ]] || return 0
+  root=$(timeout 2 git -C "$folder" rev-parse --show-toplevel 2> /dev/null) && [[ -d $root ]] && folder=$root
+  [[ $folder != "$HOME" && $folder != / ]] || return 0
+  read_config
+  for i in "${!project_lines[@]}"; do
+    parse_project $((i + 1))
+    if [[ $_ct_path == "$folder" ]]; then n=$((i + 1)) old=${_ct_color,,}; fi
+  done
+  [[ $old != "$color" ]] || return 0
+  # Inside a project of that color already: nothing to remember.
+  _ct_load
+  _ct_match_dir "$folder"
+  ((n)) || [[ ${_ct_match,,} != "$color" ]] || return 0
+  shown=$(display_path "$folder")
+  name=${folder##*/}
+  if ((n)); then
+    title="Make $name this color?"
+    body="$shown is project $n. Every terminal there will turn this color."
+    button="Change color"
+  else
+    title="Keep this color for $name?"
+    key=$((${#project_lines[@]} + 1))
+    body="Every terminal in $shown will turn this color"
+    if ((key <= max_keys)); then body+=", and Super+Ctrl+Alt+$key will open it."; else body+="."; fi
+    button="Remember"
   fi
-  notify "The terminal kept its color" "Its window holds several terminals, and the one you are in did not answer: a program is running there, or it was opened before Colorful Terminals was turned on. Press the key again at a shell prompt."
-  exit 1
+  action=$(timeout 600 notify-send -a "Colorful Terminals" --expire-time=10000 --action="remember=$button" -- "$title" "$body" 2> /dev/null) || return 0
+  [[ $action == remember ]] || return 0
+  if ((n)); then
+    out=$( (cmd_color "$n" "$color") 2>&1) || { notify "The color was not saved" "$out"; return 1; }
+  else
+    out=$( (cmd_add "$folder" "$color") 2>&1) || { notify "The color was not saved" "$out"; return 1; }
+  fi
+  # The terminal follows its project from now on, so leaving the folder
+  # brings the theme color back.
+  if [[ $inbox == "$XDG_RUNTIME_DIR/colorful-terminals/tty/"* && -d ${inbox%/*} ]]; then
+    printf 'reset\n' > "$inbox"
+  fi
+  if ((n)); then
+    notify "$name is this color now" "Every terminal in $shown turns it."
+  else
+    if ((key <= max_keys)); then
+      notify "$name is a project now" "Super+Ctrl+Alt+$key opens it. All projects: Super+Ctrl+Alt+0."
+    else
+      notify "$name is a project now" "Its color is saved; the keys go up to $max_keys. All projects: Super+Ctrl+Alt+0."
+    fi
+  fi
 }
 
 # Ctrl+Alt+Shift+F12, to the focused surface with explicit mods, the way
@@ -666,7 +749,7 @@ kitty_focused() {
 # project color of the shell's folder, or the theme's), and leaves it for the
 # shell's next prompt.
 paint_target() {
-  local color=$1 shown name inbox cwd
+  local color=$1 shown inbox cwd
   shown=$color
   if [[ $color == reset ]]; then
     cwd=$(readlink "/proc/$target_shell/cwd" 2> /dev/null) || cwd=""
@@ -690,8 +773,7 @@ paint_target() {
     # shellcheck disable=SC2016
     timeout 1 bash -c 'printf "\e]111\a" > "$1"' _ "$target_tty" 2> /dev/null || true
   fi
-  name=${target_tty#/dev/}
-  inbox=$XDG_RUNTIME_DIR/colorful-terminals/tty/${name//\//-}
+  inbox=$(inbox_for "$target_tty")
   [[ -d ${inbox%/*} ]] || mkdir -m 700 "${inbox%/*}"
   printf '%s\n' "$color" > "$inbox"
 }
@@ -1191,6 +1273,7 @@ main() {
     open) cmd_open "$@" ;;
     paint) cmd_paint "$@" ;;
     paint-color) cmd_paint_color "$@" ;;
+    offer) cmd_offer "$@" ;;
     state) cmd_state "$@" ;;
     scan) cmd_scan "$@" ;;
     dirs) cmd_dirs "$@" ;;

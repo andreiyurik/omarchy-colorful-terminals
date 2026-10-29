@@ -77,6 +77,8 @@ A color from `Super+Ctrl+Alt+Shift` belongs to that one terminal. It stays when 
 
 A program that paints its own background (`vim` with a color scheme, `btop`) hides the color until it exits.
 
+**Remember.** Colored a terminal and like it there? The notification that comes up asks **Keep this color for shop?**: **Remember** makes the folder (its git repository, if it is in one) a project in that color, with the next free `Super+Ctrl+Alt` key, and the terminal follows the project from then on. In a project of another color it asks **Make shop this color?** instead. Ignore it and the color stays with that one terminal. It never asks in `~` or `/`, after `+0`, or when the project already has that color.
+
 ### In the panel
 
 | Keys | What it does |
