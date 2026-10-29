@@ -240,6 +240,9 @@ cp "$base_vars" "$run/vars.fd"
 start_vm "$run/run.qcow2" "$run/vars.fd" || exit 1
 wait_for_ssh "$boot_timeout" || { echo "the VM did not come up"; exit 1; }
 tar -C /src --exclude=./tests/release-vm/out --exclude=./tests/omarchy/out -cf - . | ssh_guest 'rm -rf src && mkdir src && tar -C src -xf -'
+# omarchy plugin add clones the repository, so uncommitted changes are
+# committed in the guest's copy, or the test would run the last commit.
+ssh_guest 'cd src && git add -A && { git diff --cached --quiet || git -c user.name=test -c user.email=test@example.com commit -qm "Working tree under test"; }'
 waited=0
 until guest session-ready 2> /dev/null; do
   ((waited < 180)) || { echo "Hyprland and the Omarchy shell did not start"; exit 1; }
@@ -314,6 +317,26 @@ press ret
 sleep 2
 pixel=$(guest window-pixel)
 if nearer "$pixel" "$project" "$red"; then ok "and the project color is back in the project ($pixel)"; else not_ok "and the project color is back in the project (got $pixel)"; fi
+
+# With a program running the shell cannot answer, so the helper colors the
+# terminal itself, and the shell keeps that color when the program ends.
+type_text "sleep 10"
+press ret
+sleep 1
+press meta_l-ctrl-alt-shift-3
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$red" "$project"; then ok "the key colors a terminal while a program runs in it ($pixel)"; else not_ok "the key colors a terminal while a program runs in it (got $pixel)"; fi
+guest shot 04c-color-key-busy
+sleep 9
+press ret
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$red" "$project"; then ok "and the shell keeps it when the program ends ($pixel)"; else not_ok "and the shell keeps it when the program ends (got $pixel)"; fi
+press meta_l-ctrl-alt-shift-0
+sleep 2
+pixel=$(guest window-pixel)
+if nearer "$pixel" "$project" "$red"; then ok "until Super+Ctrl+Alt+Shift+0 ($pixel)"; else not_ok "until Super+Ctrl+Alt+Shift+0 (got $pixel)"; fi
 
 # A second terminal in the same folder (Super+Return opens one there): the key
 # colors only the focused one, even when one Ghostty draws both.
