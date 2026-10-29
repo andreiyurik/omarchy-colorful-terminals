@@ -208,7 +208,10 @@ check_paint() {   # <name> <shell command>
   local name=$1 command=$2
   eq "$name: a color of its own, kept in a project, until 0" "$paint_expected" \
     "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$paint_walk")"
-  eq "$name: says it got the color" "0" "$(stat -c %s "$HOME/run/colorful-terminals/paint" 2> /dev/null)"
+  # It answers with its file name and folder, for the Remember button.
+  ok "$name: says it got the color, and which terminal it is" \
+    grep -qxE 'pts-[0-9]+' <(head -n 1 "$HOME/run/colorful-terminals/paint")
+  eq "$name: and its folder" "/" "$(sed -n 2p "$HOME/run/colorful-terminals/paint")"
   eq "$name: the key with nothing left does nothing" "" \
     "$(XDG_RUNTIME_DIR=$HOME/run osc_codes "$command" "$key")"
   eq "$name: a bad color is ignored" "" \

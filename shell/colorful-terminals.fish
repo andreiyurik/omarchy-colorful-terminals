@@ -122,9 +122,12 @@ function __ct_take --argument-names file
     end
 end
 
+# Answers with this terminal's file name and folder (see the bash hook).
 function __ct_key
-    test -n "$__ct_request"; and __ct_take $__ct_request; and __ct_prompt
-    return 0
+    test -n "$__ct_request"; and __ct_take $__ct_request; or return 0
+    set -l name (string replace -r '.*/' '' -- "$__ct_inbox")
+    printf '%s\n%s\n' "$name" "$PWD" >$__ct_request
+    __ct_prompt
 end
 
 # This terminal's file, named after its tty: /dev/pts/3 is tty/pts-3. A color

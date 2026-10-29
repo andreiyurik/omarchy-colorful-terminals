@@ -118,9 +118,11 @@ _ct_take() {
   fi
 }
 
+# Answers with this terminal's file name and folder (see the bash hook).
 _ct_key() {
-  [[ -n $_ct_request ]] && _ct_take $_ct_request && _ct_precmd
-  return 0
+  [[ -n $_ct_request ]] && _ct_take $_ct_request || return 0
+  print -r -- "${_ct_inbox:t}"$'\n'"$PWD" >| $_ct_request
+  _ct_precmd
 }
 
 # Only for interactive shells that draw on a real terminal.

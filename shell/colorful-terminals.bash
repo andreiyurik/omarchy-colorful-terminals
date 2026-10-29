@@ -78,9 +78,12 @@ _ct_take() {
   fi
 }
 
+# Answers with this terminal's file name and folder, so the helper can offer
+# to remember the color for the folder.
 _ct_key() {
-  [[ -n $_ct_request ]] && _ct_take "$_ct_request" && _ct_show
-  return 0
+  [[ -n $_ct_request ]] && _ct_take "$_ct_request" || return 0
+  printf '%s\n%s\n' "${_ct_inbox##*/}" "$PWD" >| "$_ct_request"
+  _ct_show
 }
 
 # Only for interactive shells that draw on a real terminal.
